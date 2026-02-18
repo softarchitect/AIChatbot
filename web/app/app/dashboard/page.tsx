@@ -134,26 +134,27 @@ export default function DashboardPage() {
                   <AreaChart data={usageTrend}>
                     <defs>
                       <linearGradient id="colorUsers" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="oklch(0.45 0.18 255)" stopOpacity={0.3} />
-                        <stop offset="95%" stopColor="oklch(0.45 0.18 255)" stopOpacity={0} />
+                        <stop offset="5%" stopColor="oklch(0.55 0.12 240)" stopOpacity={0.2} />
+                        <stop offset="95%" stopColor="oklch(0.55 0.12 240)" stopOpacity={0} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.80 0.01 250 / 0.3)" />
-                    <XAxis dataKey="month" tick={{ fontSize: 12 }} stroke="oklch(0.50 0.02 255)" />
-                    <YAxis tick={{ fontSize: 12 }} stroke="oklch(0.50 0.02 255)" />
+                    <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.90 0.005 240 / 0.5)" />
+                    <XAxis dataKey="month" tick={{ fontSize: 12, fill: "oklch(0.55 0.015 240)" }} stroke="oklch(0.90 0.005 240)" />
+                    <YAxis tick={{ fontSize: 12, fill: "oklch(0.55 0.015 240)" }} stroke="oklch(0.90 0.005 240)" />
                     <Tooltip
                       contentStyle={{
-                        backgroundColor: "oklch(0.16 0.02 260)",
-                        border: "1px solid oklch(0.25 0.02 260)",
+                        backgroundColor: "oklch(0.995 0.001 80)",
+                        border: "1px solid oklch(0.925 0.005 240)",
                         borderRadius: "8px",
-                        color: "oklch(0.93 0.01 250)",
+                        color: "oklch(0.28 0.015 260)",
                         fontSize: "12px",
+                        boxShadow: "0 4px 12px oklch(0.28 0.015 260 / 0.08)",
                       }}
                     />
                     <Area
                       type="monotone"
                       dataKey="users"
-                      stroke="oklch(0.45 0.18 255)"
+                      stroke="oklch(0.55 0.12 240)"
                       strokeWidth={2}
                       fill="url(#colorUsers)"
                     />
@@ -176,22 +177,23 @@ export default function DashboardPage() {
               ) : (
                 <ResponsiveContainer width="100%" height={240}>
                   <BarChart data={activeUsersTrend}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.80 0.01 250 / 0.3)" />
-                    <XAxis dataKey="day" tick={{ fontSize: 12 }} stroke="oklch(0.50 0.02 255)" />
-                    <YAxis tick={{ fontSize: 12 }} stroke="oklch(0.50 0.02 255)" />
+                    <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.90 0.005 240 / 0.5)" />
+                    <XAxis dataKey="day" tick={{ fontSize: 12, fill: "oklch(0.55 0.015 240)" }} stroke="oklch(0.90 0.005 240)" />
+                    <YAxis tick={{ fontSize: 12, fill: "oklch(0.55 0.015 240)" }} stroke="oklch(0.90 0.005 240)" />
                     <Tooltip
                       contentStyle={{
-                        backgroundColor: "oklch(0.16 0.02 260)",
-                        border: "1px solid oklch(0.25 0.02 260)",
+                        backgroundColor: "oklch(0.995 0.001 80)",
+                        border: "1px solid oklch(0.925 0.005 240)",
                         borderRadius: "8px",
-                        color: "oklch(0.93 0.01 250)",
+                        color: "oklch(0.28 0.015 260)",
                         fontSize: "12px",
+                        boxShadow: "0 4px 12px oklch(0.28 0.015 260 / 0.08)",
                       }}
                     />
                     <Bar
                       dataKey="active"
-                      fill="oklch(0.60 0.16 175)"
-                      radius={[4, 4, 0, 0]}
+                      fill="oklch(0.62 0.1 175)"
+                      radius={[6, 6, 0, 0]}
                     />
                   </BarChart>
                 </ResponsiveContainer>

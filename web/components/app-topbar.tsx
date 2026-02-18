@@ -62,7 +62,7 @@ export function AppTopbar() {
       initial={false}
       animate={{ paddingInlineStart: sidebarCollapsed ? 72 : 260 }}
       transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
-      className="fixed inset-x-0 top-0 z-30 h-16 border-b border-border bg-background/80 backdrop-blur-xl"
+      className="fixed inset-x-0 top-0 z-30 h-16 border-b border-border bg-background/90 backdrop-blur-md"
     >
       <div className="flex h-full items-center justify-between gap-4 px-6">
         {/* Search */}

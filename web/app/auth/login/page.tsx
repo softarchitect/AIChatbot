@@ -51,8 +51,8 @@ export default function LoginPage() {
     <div className="flex min-h-screen">
       {/* Left - Illustration */}
       <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-primary">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,_oklch(0.55_0.22_255_/_0.3),_transparent_60%)]" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_right,_oklch(0.65_0.18_200_/_0.2),_transparent_60%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,_oklch(0.65_0.10_240_/_0.25),_transparent_60%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_right,_oklch(0.70_0.08_200_/_0.15),_transparent_60%)]" />
         <div className="relative z-10 flex flex-col justify-between p-12">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-foreground/20 backdrop-blur-sm text-primary-foreground font-bold">

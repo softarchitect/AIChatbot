@@ -109,7 +109,7 @@ export function AnimatedKpiCard({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
       whileHover={{ y: -2 }}
-      className="group rounded-xl border border-border bg-card p-6 transition-shadow hover:shadow-lg hover:shadow-primary/5"
+      className="group rounded-xl border border-border bg-card p-6 transition-shadow hover:shadow-md hover:shadow-foreground/[0.04]"
     >
       <div className="flex items-center justify-between">
         <p className="text-sm font-medium text-muted-foreground">{label}</p>
