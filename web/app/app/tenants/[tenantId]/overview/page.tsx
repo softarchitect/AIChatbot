@@ -1,0 +1,140 @@
+"use client";
+
+import { useParams } from "next/navigation";
+import { useState, useEffect } from "react";
+import { Users, HardDrive, Zap, Activity } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { AnimatedKpiCard, PlanBadge, TableSkeleton } from "@/components/shared";
+import { tenants, auditLogs } from "@/lib/mock/data";
+import { motion } from "framer-motion";
+
+export default function TenantOverviewPage() {
+  const params = useParams();
+  const tenant = tenants.find((t) => t.id === params.tenantId);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setLoading(false), 500);
+    return () => clearTimeout(timer);
+  }, []);
+
+  if (!tenant) return null;
+
+  const tenantLogs = auditLogs.filter((l) => l.tenantId === tenant.id);
+
+  return (
+    <div className="space-y-6">
+      {/* Usage KPIs */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <AnimatedKpiCard
+          label="Active Users"
+          value={tenant.activeUsers}
+          icon={Users}
+          trend="up"
+          trendLabel={`of ${tenant.totalUsers} total`}
+          loading={loading}
+        />
+        <AnimatedKpiCard
+          label="Storage Used"
+          value={`${(tenant.storageUsedMb / 1024).toFixed(1)} GB`}
+          icon={HardDrive}
+          trend="neutral"
+          trendLabel="of 10 GB limit"
+          loading={loading}
+        />
+        <AnimatedKpiCard
+          label="API Calls (month)"
+          value={tenant.apiCallsThisMonth.toLocaleString()}
+          icon={Zap}
+          trend="up"
+          trendLabel="18% vs last month"
+          loading={loading}
+        />
+        <AnimatedKpiCard
+          label="Uptime"
+          value="99.98%"
+          icon={Activity}
+          trend="up"
+          trendLabel="Last 30 days"
+          loading={loading}
+        />
+      </div>
+
+      {/* Plan Summary + Recent Activity */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card className="border-border">
+          <CardHeader>
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Plan Summary
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Current Plan</span>
+              <PlanBadge plan={tenant.plan} />
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Domain</span>
+              <span className="text-sm font-medium text-foreground">{tenant.domain}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Language</span>
+              <span className="text-sm font-medium text-foreground uppercase">{tenant.language}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Timezone</span>
+              <span className="text-sm font-medium text-foreground">{tenant.timezone}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Created</span>
+              <span className="text-sm font-medium text-foreground">
+                {new Date(tenant.createdAt).toLocaleDateString()}
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-border">
+          <CardHeader>
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Recent Activity
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <TableSkeleton rows={4} cols={2} />
+            ) : (
+              <div className="space-y-4">
+                {tenantLogs.slice(0, 5).map((log, i) => (
+                  <motion.div
+                    key={log.id}
+                    initial={{ opacity: 0, x: -8 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: i * 0.05 }}
+                    className="flex items-start gap-3 text-sm"
+                  >
+                    <div className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-primary" />
+                    <div>
+                      <p className="text-foreground">
+                        <span className="font-medium">{log.actor}</span>{" "}
+                        <span className="text-muted-foreground">
+                          {log.action.replace(/[._]/g, " ")}
+                        </span>
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(log.timestamp).toLocaleString()}
+                      </p>
+                    </div>
+                  </motion.div>
+                ))}
+                {tenantLogs.length === 0 && (
+                  <p className="text-sm text-muted-foreground">No recent activity.</p>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
