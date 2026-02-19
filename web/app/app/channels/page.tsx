@@ -1,7 +1,8 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Lock, Sparkles, MessageSquare, Mail, Phone, Globe } from "lucide-react";
+import Link from "next/link";
+import { Lock, Sparkles, MessageSquare, Mail, Phone, Globe, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -10,15 +11,15 @@ import { useSessionStore } from "@/lib/store";
 import { useTranslation } from "@/lib/i18n";
 
 const channels = [
-  { name: "WhatsApp", icon: MessageSquare, color: "text-success" },
-  { name: "WebChat", icon: Globe, color: "text-primary" },
-  { name: "SMS", icon: Phone, color: "text-chart-3" },
-  { name: "Email", icon: Mail, color: "text-chart-2" },
+  { name: "WhatsApp", slug: "whatsapp", feature: "whatsapp_channel", icon: MessageSquare, color: "text-success" },
+  { name: "WebChat", slug: "webchat", feature: "webchat_widget", icon: Globe, color: "text-primary" },
+  { name: "SMS", slug: "sms", feature: "sms_channel", icon: Phone, color: "text-chart-3" },
+  { name: "Email", slug: "email", feature: "email_channel", icon: Mail, color: "text-chart-2" },
 ];
 
 export default function ChannelsPage() {
-  const { locale } = useSessionStore();
-  const { t } = useTranslation(locale);
+  const hasFeatureEnabled = useSessionStore((s) => s.hasFeatureEnabled);
+  const { t } = useTranslation();
 
   return (
     <PageTransition>
@@ -41,7 +42,7 @@ export default function ChannelsPage() {
             <h1 className="text-2xl font-bold text-foreground text-balance">
               Channel Management
             </h1>
-            <p className="mx-auto max-w-md text-muted-foreground leading-relaxed">
+            <p className="mx-auto max-w-md leading-relaxed text-muted-foreground">
               {t("phase2.desc")} Manage WhatsApp, WebChat, SMS, and Email channels
               all from one unified dashboard.
             </p>
@@ -60,7 +61,13 @@ export default function ChannelsPage() {
                   <CardContent className="flex items-center gap-3 p-4">
                     <channel.icon className={`h-5 w-5 ${channel.color}`} />
                     <span className="text-sm font-medium text-foreground">{channel.name}</span>
-                    <Lock className="ml-auto h-3.5 w-3.5 text-muted-foreground" />
+                    {hasFeatureEnabled(channel.feature) ? (
+                      <Link href={`/app/channels/${channel.slug}`} className="ml-auto">
+                        <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
+                      </Link>
+                    ) : (
+                      <Lock className="ml-auto h-3.5 w-3.5 text-muted-foreground" />
+                    )}
                   </CardContent>
                 </Card>
               </motion.div>

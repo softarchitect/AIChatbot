@@ -43,8 +43,8 @@ const stagger = {
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { currentUser, locale } = useSessionStore();
-  const { t } = useTranslation(locale);
+  const { currentUser } = useSessionStore();
+  const { t } = useTranslation();
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {

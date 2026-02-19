@@ -32,7 +32,7 @@ export default function LoginPage() {
   } = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
-      email: "admin@acme.com",
+      email: "owner@saasphere.io",
       password: "password123",
     },
   });
@@ -236,8 +236,16 @@ export default function LoginPage() {
           </form>
 
           <p className="mt-6 text-center text-xs text-muted-foreground">
-            Hint: Use <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">admin@acme.com</code> for admin,{" "}
-            <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">super@acme.com</code> for supervisor, or any other email for agent role.
+            Hint: Use{" "}
+            <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">owner@saasphere.io</code>{" "}
+            (platform owner),{" "}
+            <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">admin@acme.com</code>{" "}
+            (admin),{" "}
+            <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">super@acme.com</code>{" "}
+            (supervisor), or{" "}
+            <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">agent@acme.com</code>{" "}
+            (agent). Password:{" "}
+            <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">password123</code>.
           </p>
         </motion.div>
       </div>

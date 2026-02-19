@@ -3,16 +3,12 @@
 import { useState, useEffect, useMemo } from "react";
 import { useParams } from "next/navigation";
 import { motion } from "framer-motion";
-import { Search, Download, FileText, X } from "lucide-react";
+import { Search, Download, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  Table,
-  TableBody,
-  TableCell,
   TableHead,
-  TableHeader,
-  TableRow,
+  TableCell,
 } from "@/components/ui/table";
 import {
   Select,
@@ -21,25 +17,24 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-} from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
-import { EmptyState, TableSkeleton } from "@/components/shared";
+import { EmptyState } from "@/components/shared";
+import { DataTable } from "@/components/data-table";
+import { AuditLogDetailDrawer } from "@/components/audit-log-detail-drawer";
 import { auditLogs, type AuditLog } from "@/lib/mock/data";
+import { useSessionStore } from "@/lib/store";
 import { toast } from "sonner";
 
 export default function AuditLogsPage() {
+  const hasPermission = useSessionStore((s) => s.hasPermission);
   const params = useParams();
   const tenantId = params.tenantId as string;
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [actionFilter, setActionFilter] = useState("all");
   const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null);
+  const canViewAuditLogs = hasPermission("view_audit_logs");
+  const canExportAuditLogs = hasPermission("export_audit_logs");
 
   const logs = auditLogs.filter((l) => l.tenantId === tenantId);
 
@@ -77,6 +72,7 @@ export default function AuditLogsPage() {
           variant="outline"
           onClick={() => toast.success("Export started. Check your downloads.")}
           className="gap-2"
+          disabled={!canExportAuditLogs}
         >
           <Download className="h-4 w-4" />
           Export
@@ -109,113 +105,58 @@ export default function AuditLogsPage() {
         </Select>
       </div>
 
-      {/* Table */}
-      {loading ? (
-        <TableSkeleton rows={5} cols={5} />
-      ) : filtered.length === 0 ? (
+      {!canViewAuditLogs ? (
         <EmptyState
           icon={FileText}
-          title="No audit logs found"
-          description="No matching audit log entries for the current filters."
+          title="Insufficient permissions"
+          description="You do not have access to view audit logs."
         />
       ) : (
-        <div className="rounded-xl border border-border bg-card">
-          <Table>
-            <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                <TableHead>Actor</TableHead>
-                <TableHead>Action</TableHead>
-                <TableHead className="hidden sm:table-cell">Target</TableHead>
-                <TableHead className="hidden md:table-cell">IP</TableHead>
-                <TableHead>Timestamp</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.map((log, i) => (
-                <motion.tr
-                  key={log.id}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: i * 0.03 }}
-                  className="group cursor-pointer border-b border-border transition-colors hover:bg-muted/50"
-                  onClick={() => setSelectedLog(log)}
-                >
-                  <TableCell>
-                    <div>
-                      <p className="font-medium text-foreground">{log.actor}</p>
-                      <p className="text-xs text-muted-foreground">{log.actorEmail}</p>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className="text-xs">
-                      {log.action.replace(/[._]/g, " ")}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="hidden text-muted-foreground sm:table-cell">
-                    {log.target}
-                  </TableCell>
-                  <TableCell className="hidden font-mono text-xs text-muted-foreground md:table-cell">
-                    {log.ip}
-                  </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {new Date(log.timestamp).toLocaleString()}
-                  </TableCell>
-                </motion.tr>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+        <DataTable
+          loading={loading}
+          hasRows={filtered.length > 0}
+          emptyIcon={FileText}
+          emptyTitle="No audit logs found"
+          emptyDescription="No matching audit log entries for the current filters."
+          columns={
+            <>
+              <TableHead>Actor</TableHead>
+              <TableHead>Action</TableHead>
+              <TableHead className="hidden sm:table-cell">Target</TableHead>
+              <TableHead className="hidden md:table-cell">IP</TableHead>
+              <TableHead>Timestamp</TableHead>
+            </>
+          }
+        >
+          {filtered.map((log, i) => (
+            <motion.tr
+              key={log.id}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: i * 0.03 }}
+              className="group cursor-pointer border-b border-border transition-colors hover:bg-muted/50"
+              onClick={() => setSelectedLog(log)}
+            >
+              <TableCell>
+                <div>
+                  <p className="font-medium text-foreground">{log.actor}</p>
+                  <p className="text-xs text-muted-foreground">{log.actorEmail}</p>
+                </div>
+              </TableCell>
+              <TableCell>
+                <Badge variant="outline" className="text-xs">
+                  {log.action.replace(/[._]/g, " ")}
+                </Badge>
+              </TableCell>
+              <TableCell className="hidden text-muted-foreground sm:table-cell">{log.target}</TableCell>
+              <TableCell className="hidden font-mono text-xs text-muted-foreground md:table-cell">{log.ip}</TableCell>
+              <TableCell className="text-sm text-muted-foreground">{new Date(log.timestamp).toLocaleString()}</TableCell>
+            </motion.tr>
+          ))}
+        </DataTable>
       )}
 
-      {/* Detail Drawer */}
-      <Sheet open={!!selectedLog} onOpenChange={(open) => !open && setSelectedLog(null)}>
-        <SheetContent className="w-full sm:max-w-lg">
-          <SheetHeader>
-            <SheetTitle>Log Details</SheetTitle>
-            <SheetDescription>
-              Full details for this audit log entry.
-            </SheetDescription>
-          </SheetHeader>
-          {selectedLog && (
-            <div className="mt-6 space-y-4">
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <p className="text-muted-foreground">Actor</p>
-                  <p className="font-medium text-foreground">{selectedLog.actor}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Email</p>
-                  <p className="font-medium text-foreground">{selectedLog.actorEmail}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Action</p>
-                  <Badge variant="outline">{selectedLog.action}</Badge>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Target</p>
-                  <p className="font-medium text-foreground">{selectedLog.target}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">IP Address</p>
-                  <p className="font-mono text-foreground">{selectedLog.ip}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Timestamp</p>
-                  <p className="font-medium text-foreground">
-                    {new Date(selectedLog.timestamp).toLocaleString()}
-                  </p>
-                </div>
-              </div>
-              <div>
-                <p className="mb-2 text-sm text-muted-foreground">Details (JSON)</p>
-                <pre className="rounded-lg bg-muted/50 p-4 text-xs font-mono text-muted-foreground overflow-x-auto">
-                  {JSON.stringify(selectedLog.details, null, 2)}
-                </pre>
-              </div>
-            </div>
-          )}
-        </SheetContent>
-      </Sheet>
+      <AuditLogDetailDrawer log={selectedLog} open={!!selectedLog} onOpenChange={(open) => !open && setSelectedLog(null)} />
     </div>
   );
 }

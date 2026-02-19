@@ -36,6 +36,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog, EmptyState } from "@/components/shared";
+import { useSessionStore } from "@/lib/store";
 import { apiKeys } from "@/lib/mock/data";
 import { toast } from "sonner";
 
@@ -52,8 +53,11 @@ function maskKey(key: string) {
 }
 
 export default function ApiKeysPage() {
+  const hasPermission = useSessionStore((s) => s.hasPermission);
   const params = useParams();
   const tenantId = params.tenantId as string;
+  const canViewApiKeys = hasPermission("view_api_keys");
+  const canManageApiKeys = hasPermission("manage_api_keys");
   const keys = apiKeys.filter((k) => k.tenantId === tenantId);
 
   const [createOpen, setCreateOpen] = useState(false);
@@ -109,14 +113,20 @@ export default function ApiKeysPage() {
             Manage API keys for programmatic access.
           </p>
         </div>
-        <Button onClick={() => setCreateOpen(true)} className="gap-2">
+        <Button onClick={() => setCreateOpen(true)} className="gap-2" disabled={!canManageApiKeys}>
           <Plus className="h-4 w-4" />
           Generate Key
         </Button>
       </div>
 
       {/* Keys List */}
-      {keys.length === 0 ? (
+      {!canViewApiKeys ? (
+        <EmptyState
+          icon={Key}
+          title="Insufficient permissions"
+          description="You do not have access to view API keys."
+        />
+      ) : keys.length === 0 ? (
         <EmptyState
           icon={Key}
           title="No API keys"
@@ -187,6 +197,7 @@ export default function ApiKeysPage() {
                     size="sm"
                     className="gap-2 text-destructive hover:text-destructive shrink-0"
                     onClick={() => setRevokeTarget(key.id)}
+                    disabled={!canManageApiKeys}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                     Revoke
@@ -221,7 +232,7 @@ export default function ApiKeysPage() {
       </Card>
 
       {/* Create Key Modal */}
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+      <Dialog open={createOpen && canManageApiKeys} onOpenChange={setCreateOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Generate API Key</DialogTitle>

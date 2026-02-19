@@ -48,6 +48,7 @@ import {
 } from "@/components/ui/select";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { StatusPill, RoleBadge, EmptyState, TableSkeleton } from "@/components/shared";
+import { useSessionStore } from "@/lib/store";
 import { tenantUsers, type Role } from "@/lib/mock/data";
 import { toast } from "sonner";
 
@@ -59,12 +60,14 @@ const inviteSchema = z.object({
 type InviteForm = z.infer<typeof inviteSchema>;
 
 export default function TenantUsersPage() {
+  const hasPermission = useSessionStore((s) => s.hasPermission);
   const params = useParams();
   const tenantId = params.tenantId as string;
   const [loading, setLoading] = useState(true);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const canEditUsers = hasPermission("edit_users");
 
   const users = tenantUsers.filter((u) => u.tenantId === tenantId);
 
@@ -107,7 +110,7 @@ export default function TenantUsersPage() {
           <h2 className="text-lg font-semibold text-foreground">Users</h2>
           <p className="text-sm text-muted-foreground">{users.length} users in this tenant</p>
         </div>
-        <Button onClick={() => setInviteOpen(true)} className="gap-2">
+        <Button onClick={() => setInviteOpen(true)} className="gap-2" disabled={!canEditUsers}>
           <UserPlus className="h-4 w-4" />
           Invite User
         </Button>
@@ -133,7 +136,7 @@ export default function TenantUsersPage() {
           title="No users found"
           description="Invite team members to start collaborating."
           action={
-            <Button onClick={() => setInviteOpen(true)} className="gap-2">
+            <Button onClick={() => setInviteOpen(true)} className="gap-2" disabled={!canEditUsers}>
               <UserPlus className="h-4 w-4" />
               Invite User
             </Button>
@@ -196,16 +199,23 @@ export default function TenantUsersPage() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => toast.success(`Role changed for ${user.name}`)}>
+                        <DropdownMenuItem
+                          disabled={!canEditUsers}
+                          onClick={() => toast.success(`Role changed for ${user.name}`)}
+                        >
                           <Shield className="mr-2 h-4 w-4" />
                           Change Role
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => toast.success(`Password reset for ${user.name}`)}>
+                        <DropdownMenuItem
+                          disabled={!canEditUsers}
+                          onClick={() => toast.success(`Password reset for ${user.name}`)}
+                        >
                           <KeyRound className="mr-2 h-4 w-4" />
                           Reset Password
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           className="text-destructive focus:text-destructive"
+                          disabled={!canEditUsers}
                           onClick={() => toast.success(`${user.name} deactivated`)}
                         >
                           <Ban className="mr-2 h-4 w-4" />

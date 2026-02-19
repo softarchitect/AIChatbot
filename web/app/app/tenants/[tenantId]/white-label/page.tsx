@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useParams } from "next/navigation";
-import { motion } from "framer-motion";
 import { Upload, Globe, ArrowLeftRight, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,11 +10,15 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { tenants } from "@/lib/mock/data";
+import { useSessionStore } from "@/lib/store";
+import { BrandingPreviewCard } from "@/components/branding-preview-card";
 import { toast } from "sonner";
 
 export default function WhiteLabelPage() {
+  const hasPermission = useSessionStore((s) => s.hasPermission);
   const params = useParams();
   const tenant = tenants.find((t) => t.id === params.tenantId);
+  const canManageBranding = hasPermission("manage_branding");
 
   const [primaryColor, setPrimaryColor] = useState(tenant?.primaryColor ?? "#2563eb");
   const [accentColor, setAccentColor] = useState(tenant?.accentColor ?? "#06b6d4");
@@ -38,6 +41,7 @@ export default function WhiteLabelPage() {
         <Button
           onClick={() => toast.success("Branding saved successfully.")}
           className="gap-2"
+          disabled={!canManageBranding}
         >
           <Save className="h-4 w-4" />
           Save Changes
@@ -83,11 +87,13 @@ export default function WhiteLabelPage() {
                       value={primaryColor}
                       onChange={(e) => setPrimaryColor(e.target.value)}
                       className="h-10 w-10 cursor-pointer rounded-lg border border-border"
+                      disabled={!canManageBranding}
                     />
                     <Input
                       value={primaryColor}
                       onChange={(e) => setPrimaryColor(e.target.value)}
                       className="font-mono text-sm"
+                      disabled={!canManageBranding}
                     />
                   </div>
                 </div>
@@ -99,11 +105,13 @@ export default function WhiteLabelPage() {
                       value={accentColor}
                       onChange={(e) => setAccentColor(e.target.value)}
                       className="h-10 w-10 cursor-pointer rounded-lg border border-border"
+                      disabled={!canManageBranding}
                     />
                     <Input
                       value={accentColor}
                       onChange={(e) => setAccentColor(e.target.value)}
                       className="font-mono text-sm"
+                      disabled={!canManageBranding}
                     />
                   </div>
                 </div>
@@ -123,6 +131,7 @@ export default function WhiteLabelPage() {
                   value={headerText}
                   onChange={(e) => setHeaderText(e.target.value)}
                   placeholder="Your Portal Name"
+                  disabled={!canManageBranding}
                 />
               </div>
               <div className="space-y-2">
@@ -132,6 +141,7 @@ export default function WhiteLabelPage() {
                   onChange={(e) => setWelcomeMessage(e.target.value)}
                   rows={3}
                   placeholder="Welcome to your dashboard..."
+                  disabled={!canManageBranding}
                 />
               </div>
               <div className="space-y-2">
@@ -142,6 +152,7 @@ export default function WhiteLabelPage() {
                     value={customDomain}
                     onChange={(e) => setCustomDomain(e.target.value)}
                     placeholder="portal.yourdomain.com"
+                    disabled={!canManageBranding}
                   />
                 </div>
               </div>
@@ -161,70 +172,15 @@ export default function WhiteLabelPage() {
             </div>
           </div>
 
-          <motion.div
-            layout
-            dir={rtlPreview ? "rtl" : "ltr"}
-            className="rounded-xl border border-border bg-card overflow-hidden shadow-lg"
-          >
-            {/* Preview Header */}
-            <div
-              className="flex items-center gap-3 p-4"
-              style={{ backgroundColor: primaryColor }}
-            >
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/20 text-white font-bold text-sm">
-                {tenant.name[0]}
-              </div>
-              <span className="font-semibold text-white">
-                {headerText || tenant.headerText}
-              </span>
-            </div>
-
-            {/* Preview Body */}
-            <div className="p-6 space-y-4">
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                {welcomeMessage || tenant.welcomeMessage}
-              </p>
-              <div className="flex gap-3">
-                <button
-                  className="rounded-lg px-4 py-2 text-sm font-medium text-white"
-                  style={{ backgroundColor: primaryColor }}
-                >
-                  Primary Action
-                </button>
-                <button
-                  className="rounded-lg px-4 py-2 text-sm font-medium text-white"
-                  style={{ backgroundColor: accentColor }}
-                >
-                  Secondary
-                </button>
-              </div>
-              <div className="rounded-lg border border-border p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <div
-                    className="h-3 w-3 rounded-full"
-                    style={{ backgroundColor: primaryColor }}
-                  />
-                  <span className="text-xs font-medium text-foreground">Sample Widget</span>
-                </div>
-                <div className="h-2 rounded-full bg-muted" style={{ width: "60%" }}>
-                  <div
-                    className="h-2 rounded-full"
-                    style={{ backgroundColor: accentColor, width: "75%" }}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Domain Footer */}
-            {customDomain && (
-              <div className="border-t border-border px-6 py-3">
-                <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-                  <Globe className="h-3 w-3" />
-                  {customDomain}
-                </p>
-              </div>
-            )}
-          </motion.div>
+          <BrandingPreviewCard
+            tenantNameInitial={tenant.name[0]}
+            primaryColor={primaryColor}
+            accentColor={accentColor}
+            headerText={headerText || tenant.headerText}
+            welcomeMessage={welcomeMessage || tenant.welcomeMessage}
+            customDomain={customDomain}
+            rtlPreview={rtlPreview}
+          />
         </div>
       </div>
     </div>

@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
+import { useSessionStore } from "@/lib/store";
 import { toast } from "sonner";
 
 interface ChecklistItem {
@@ -18,11 +19,13 @@ interface ChecklistItem {
 }
 
 export default function SecurityPage() {
+  const hasPermission = useSessionStore((s) => s.hasPermission);
   const [sessionExpiry, setSessionExpiry] = useState([60]);
   const [refreshEnabled, setRefreshEnabled] = useState(true);
   const [mfaEnabled, setMfaEnabled] = useState(false);
   const [googleOAuth, setGoogleOAuth] = useState(true);
   const [microsoftOAuth, setMicrosoftOAuth] = useState(false);
+  const canManageSecurity = hasPermission("manage_security");
 
   const checklist: ChecklistItem[] = [
     { label: "MFA enabled for all admins", done: mfaEnabled },
@@ -45,7 +48,7 @@ export default function SecurityPage() {
             Configure session, authentication, and security policies.
           </p>
         </div>
-        <Button onClick={() => toast.success("Security settings saved.")} className="gap-2">
+        <Button onClick={() => toast.success("Security settings saved.")} className="gap-2" disabled={!canManageSecurity}>
           <Save className="h-4 w-4" />
           Save Changes
         </Button>
@@ -72,6 +75,7 @@ export default function SecurityPage() {
                 max={480}
                 min={15}
                 step={15}
+                disabled={!canManageSecurity}
               />
               <p className="text-xs text-muted-foreground">
                 Recommended: 60-120 minutes for most use cases.
@@ -85,7 +89,7 @@ export default function SecurityPage() {
                   Allow silent token refresh before expiry
                 </p>
               </div>
-              <Switch checked={refreshEnabled} onCheckedChange={setRefreshEnabled} />
+              <Switch checked={refreshEnabled} onCheckedChange={setRefreshEnabled} disabled={!canManageSecurity} />
             </div>
           </CardContent>
         </Card>
@@ -104,7 +108,7 @@ export default function SecurityPage() {
                   Require MFA for all users
                 </p>
               </div>
-              <Switch checked={mfaEnabled} onCheckedChange={setMfaEnabled} />
+              <Switch checked={mfaEnabled} onCheckedChange={setMfaEnabled} disabled={!canManageSecurity} />
             </div>
 
             <div className="h-px bg-border" />
@@ -123,7 +127,7 @@ export default function SecurityPage() {
                   </div>
                   <span className="text-sm font-medium text-foreground">Google</span>
                 </div>
-                <Switch checked={googleOAuth} onCheckedChange={setGoogleOAuth} />
+                <Switch checked={googleOAuth} onCheckedChange={setGoogleOAuth} disabled={!canManageSecurity} />
               </div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -134,7 +138,7 @@ export default function SecurityPage() {
                   </div>
                   <span className="text-sm font-medium text-foreground">Microsoft</span>
                 </div>
-                <Switch checked={microsoftOAuth} onCheckedChange={setMicrosoftOAuth} />
+                <Switch checked={microsoftOAuth} onCheckedChange={setMicrosoftOAuth} disabled={!canManageSecurity} />
               </div>
             </div>
           </CardContent>

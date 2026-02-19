@@ -15,7 +15,6 @@ import {
 import { cn } from "@/lib/utils";
 import { useSessionStore } from "@/lib/store";
 import { useTranslation } from "@/lib/i18n";
-import { TenantSwitcher } from "./tenant-switcher";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
@@ -31,15 +30,16 @@ interface NavItem {
 
 export function AppSidebar() {
   const pathname = usePathname();
-  const { sidebarCollapsed, toggleSidebar, locale, hasPermission, currentTenant } = useSessionStore();
-  const { t } = useTranslation(locale);
+  const { sidebarCollapsed, toggleSidebar, hasPermission, hasFeatureEnabled, currentTenant } = useSessionStore();
+  const { t } = useTranslation();
 
   const tenantId = currentTenant?.id ?? "t1";
+  const channelsEnabled = hasFeatureEnabled("whatsapp_channel") || hasFeatureEnabled("sms_channel") || hasFeatureEnabled("email_channel");
 
   const navItems: NavItem[] = [
     { label: t("nav.dashboard"), href: "/app/dashboard", icon: LayoutDashboard },
     { label: t("nav.tenants"), href: "/app/tenants", icon: Building2, permission: "view_tenants" },
-    { label: t("nav.channels"), href: "/app/channels", icon: MessageSquare, locked: true, badge: "Phase 2" },
+    { label: t("nav.channels"), href: "/app/channels", icon: MessageSquare, locked: !channelsEnabled, badge: channelsEnabled ? undefined : "Locked" },
     { label: t("nav.profile"), href: "/app/profile", icon: User },
   ];
 
@@ -78,13 +78,8 @@ export function AppSidebar() {
           </AnimatePresence>
         </div>
 
-        {/* Tenant Switcher */}
-        <div className="px-3 py-3">
-          <TenantSwitcher collapsed={sidebarCollapsed} />
-        </div>
-
         {/* Navigation */}
-        <nav className="flex-1 overflow-y-auto px-3 py-2">
+        <nav className="flex-1 overflow-y-auto px-3 py-3">
           <div className="space-y-1">
             {navItems.map((item) => {
               const disabled = item.permission && !hasPermission(item.permission);
@@ -94,7 +89,7 @@ export function AppSidebar() {
                 <Link
                   key={item.href}
                   href={locked ? "#" : item.href}
-                  aria-disabled={disabled || locked}
+                  aria-disabled={disabled || locked ? true : undefined}
                   className={cn(
                     "group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150",
                     isActive(item.href)
@@ -139,7 +134,7 @@ export function AppSidebar() {
                 return (
                   <Tooltip key={item.href}>
                     <TooltipTrigger asChild>{content}</TooltipTrigger>
-                    <TooltipContent side="end" className="flex items-center gap-2">
+                    <TooltipContent side="right" className="flex items-center gap-2">
                       {item.label}
                       {locked && <Lock className="h-3 w-3" />}
                     </TooltipContent>
@@ -168,7 +163,7 @@ export function AppSidebar() {
                       <TooltipTrigger asChild>
                         <Link
                           href={item.href}
-                          aria-disabled={disabled}
+                          aria-disabled={disabled ? true : undefined}
                           className={cn(
                             "group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-150",
                             isActive(item.href)
@@ -183,7 +178,7 @@ export function AppSidebar() {
                         </Link>
                       </TooltipTrigger>
                       {(sidebarCollapsed || disabled) && (
-                        <TooltipContent side="end">
+                        <TooltipContent side="right">
                           {disabled ? "Insufficient permissions" : item.label}
                         </TooltipContent>
                       )}

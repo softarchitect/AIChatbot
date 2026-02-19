@@ -1,16 +1,14 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { motion } from "framer-motion";
-import { Search, ToggleLeft, ToggleRight, AlertTriangle, RefreshCw } from "lucide-react";
+import { Search, ToggleLeft, ToggleRight } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { featureFlags, type FeatureFlag } from "@/lib/mock/data";
+import { useSessionStore } from "@/lib/store";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
+import { FeatureFlagToggleRow } from "@/components/feature-flag-toggle-row";
 
 const groupLabels: Record<string, string> = {
   channels: "Channels",
@@ -20,8 +18,10 @@ const groupLabels: Record<string, string> = {
 };
 
 export default function FeatureFlagsPage() {
+  const hasPermission = useSessionStore((s) => s.hasPermission);
   const [flags, setFlags] = useState<FeatureFlag[]>(featureFlags);
   const [search, setSearch] = useState("");
+  const canManageFeatureFlags = hasPermission("manage_feature_flags");
 
   const filtered = useMemo(() => {
     if (!search) return flags;
@@ -35,6 +35,10 @@ export default function FeatureFlagsPage() {
   const groups = Array.from(new Set(filtered.map((f) => f.group)));
 
   const toggleFlag = (id: string) => {
+    if (!canManageFeatureFlags) {
+      toast.error("Insufficient permissions");
+      return;
+    }
     setFlags((prev) =>
       prev.map((f) => (f.id === id ? { ...f, enabled: !f.enabled } : f))
     );
@@ -45,6 +49,10 @@ export default function FeatureFlagsPage() {
   };
 
   const bulkToggle = (enable: boolean) => {
+    if (!canManageFeatureFlags) {
+      toast.error("Insufficient permissions");
+      return;
+    }
     setFlags((prev) => prev.map((f) => ({ ...f, enabled: enable })));
     toast.success(`All flags ${enable ? "enabled" : "disabled"}`);
   };
@@ -60,11 +68,11 @@ export default function FeatureFlagsPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => bulkToggle(true)} className="gap-2">
+          <Button variant="outline" size="sm" onClick={() => bulkToggle(true)} className="gap-2" disabled={!canManageFeatureFlags}>
             <ToggleRight className="h-4 w-4" />
             Enable All
           </Button>
-          <Button variant="outline" size="sm" onClick={() => bulkToggle(false)} className="gap-2">
+          <Button variant="outline" size="sm" onClick={() => bulkToggle(false)} className="gap-2" disabled={!canManageFeatureFlags}>
             <ToggleLeft className="h-4 w-4" />
             Disable All
           </Button>
@@ -94,35 +102,13 @@ export default function FeatureFlagsPage() {
             {filtered
               .filter((f) => f.group === group)
               .map((flag, i) => (
-                <motion.div
+                <FeatureFlagToggleRow
                   key={flag.id}
-                  initial={{ opacity: 0, y: 4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.03 }}
-                  className="flex items-center justify-between rounded-lg px-4 py-3 transition-colors hover:bg-muted/50"
-                >
-                  <div className="flex-1 min-w-0 me-4">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium text-foreground">{flag.name}</p>
-                      {flag.requiresRestart && (
-                        <Badge
-                          variant="outline"
-                          className="gap-1 text-[10px] px-1.5 py-0 bg-warning/10 text-warning border-warning/20"
-                        >
-                          <RefreshCw className="h-2.5 w-2.5" />
-                          Restart
-                        </Badge>
-                      )}
-                    </div>
-                    <p className="mt-0.5 text-xs text-muted-foreground truncate">
-                      {flag.description}
-                    </p>
-                  </div>
-                  <Switch
-                    checked={flag.enabled}
-                    onCheckedChange={() => toggleFlag(flag.id)}
-                  />
-                </motion.div>
+                  flag={flag}
+                  index={i}
+                  disabled={!canManageFeatureFlags}
+                  onToggle={toggleFlag}
+                />
               ))}
           </CardContent>
         </Card>

@@ -17,7 +17,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { PageTransition } from "@/components/shared";
+import { EmptyState, PageTransition } from "@/components/shared";
+import { useSessionStore } from "@/lib/store";
 import { toast } from "sonner";
 import { useState } from "react";
 
@@ -33,8 +34,10 @@ const createTenantSchema = z.object({
 type CreateTenantForm = z.infer<typeof createTenantSchema>;
 
 export default function CreateTenantPage() {
+  const hasPermission = useSessionStore((s) => s.hasPermission);
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
+  const canManageTenants = hasPermission("manage_tenants");
 
   const {
     register,
@@ -60,6 +63,13 @@ export default function CreateTenantPage() {
 
   return (
     <PageTransition>
+      {!canManageTenants ? (
+        <EmptyState
+          icon={Loader2}
+          title="Insufficient permissions"
+          description="Only platform owners can create tenants."
+        />
+      ) : (
       <div className="mx-auto max-w-2xl space-y-6">
         {/* Back */}
         <Button
@@ -186,6 +196,7 @@ export default function CreateTenantPage() {
           </CardContent>
         </Card>
       </div>
+      )}
     </PageTransition>
   );
 }

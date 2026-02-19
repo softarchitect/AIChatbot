@@ -5,6 +5,8 @@ import { tenants } from "./mock/data";
 
 interface SessionState {
   isAuthenticated: boolean;
+  accessToken: string | null;
+  refreshToken: string | null;
   currentUser: {
     id: string;
     name: string;
@@ -27,6 +29,7 @@ interface SessionState {
   setSidebarCollapsed: (collapsed: boolean) => void;
   setLoading: (loading: boolean) => void;
   hasPermission: (permission: string) => boolean;
+  hasFeatureEnabled: (featureKey: string) => boolean;
 }
 
 const rolePermissionsMap: Record<Role, string[]> = {
@@ -57,6 +60,8 @@ export const useSessionStore = create<SessionState>()(
   persist(
     (set, get) => ({
   isAuthenticated: false,
+  accessToken: null,
+  refreshToken: null,
   currentUser: null,
   currentTenant: null,
   locale: "en",
@@ -64,20 +69,59 @@ export const useSessionStore = create<SessionState>()(
   sidebarCollapsed: false,
   isLoading: false,
 
-  login: async (email: string, _password: string) => {
+  login: async (email: string, password: string) => {
     set({ isLoading: true });
-    // Simulate API delay
+    const useApi = process.env.NEXT_PUBLIC_USE_API_AUTH === "true";
+
+    if (useApi) {
+      try {
+        const response = await fetch("/api/v1/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password }),
+        });
+        if (!response.ok) {
+          set({ isLoading: false });
+          return false;
+        }
+
+        const result = await response.json();
+        const role = result.user.role as Role;
+        const firstTenantId = result.user.tenantIds?.[0];
+        const firstTenant = tenants.find((t) => t.id === firstTenantId) ?? tenants[0];
+
+        set({
+          isAuthenticated: true,
+          accessToken: result.accessToken ?? null,
+          refreshToken: result.refreshToken ?? null,
+          currentUser: {
+            id: result.user.id,
+            name: result.user.name,
+            email: result.user.email,
+            role,
+          },
+          currentTenant: firstTenant,
+          isLoading: false,
+        });
+        return true;
+      } catch {
+        set({ isLoading: false });
+        return false;
+      }
+    }
+
     await new Promise((r) => setTimeout(r, 1200));
-    const role: Role = email.includes("admin")
-      ? "admin"
-      : email.includes("super")
-        ? "supervisor"
-        : "agent";
+    const role: Role =
+      email.includes("admin") ? "admin" : email.includes("super") ? "supervisor" : "agent";
     set({
       isAuthenticated: true,
       currentUser: {
         id: "u-current",
-        name: email.includes("admin") ? "Sarah Chen" : email.includes("super") ? "James Wilson" : "Maria Garcia",
+        name: email.includes("admin")
+          ? "Sarah Chen"
+          : email.includes("super")
+            ? "James Wilson"
+            : "Maria Garcia",
         email,
         role,
       },
@@ -90,6 +134,8 @@ export const useSessionStore = create<SessionState>()(
   logout: () => {
     set({
       isAuthenticated: false,
+      accessToken: null,
+      refreshToken: null,
       currentUser: null,
       currentTenant: null,
     });
@@ -128,11 +174,27 @@ export const useSessionStore = create<SessionState>()(
     if (!user) return false;
     return rolePermissionsMap[user.role]?.includes(permission) ?? false;
   },
+
+  hasFeatureEnabled: (featureKey: string) => {
+    const tenant = get().currentTenant;
+    if (!tenant) return false;
+
+    const planFeatures: Record<string, string[]> = {
+      free: ["webchat_widget"],
+      starter: ["webchat_widget", "email_channel"],
+      professional: ["webchat_widget", "email_channel", "whatsapp_channel"],
+      enterprise: ["webchat_widget", "email_channel", "whatsapp_channel", "sms_channel"],
+    };
+
+    return planFeatures[tenant.plan]?.includes(featureKey) ?? false;
+  },
 }),
     {
       name: "saasphere-session",
       partialize: (state) => ({
         isAuthenticated: state.isAuthenticated,
+        accessToken: state.accessToken,
+        refreshToken: state.refreshToken,
         currentUser: state.currentUser,
         currentTenant: state.currentTenant,
         locale: state.locale,

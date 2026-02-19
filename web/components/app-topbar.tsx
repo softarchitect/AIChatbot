@@ -25,17 +25,16 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useSessionStore } from "@/lib/store";
 import { useTranslation } from "@/lib/i18n";
+import { TenantSwitcher } from "./tenant-switcher";
 
 export function AppTopbar() {
   const router = useRouter();
   const { theme, setTheme } = useTheme();
   const {
     currentUser,
-    currentTenant,
     locale,
     setLocale,
     toggleDir,
@@ -43,7 +42,7 @@ export function AppTopbar() {
     sidebarCollapsed,
     logout,
   } = useSessionStore();
-  const { t } = useTranslation(locale);
+  const { t } = useTranslation();
   const [searchOpen, setSearchOpen] = useState(false);
 
   const handleLogout = () => {
@@ -76,12 +75,7 @@ export function AppTopbar() {
               onBlur={() => setSearchOpen(false)}
             />
           </div>
-          {currentTenant && (
-            <Badge variant="outline" className="hidden md:flex gap-1.5 shrink-0">
-              <span className="h-2 w-2 rounded-full bg-success" />
-              {currentTenant.name}
-            </Badge>
-          )}
+          <TenantSwitcher inTopbar />
         </div>
 
         {/* Actions */}

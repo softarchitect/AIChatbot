@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils";
 import { useSessionStore } from "@/lib/store";
 import { tenants } from "@/lib/mock/data";
 
-export function TenantSwitcher({ collapsed }: { collapsed?: boolean }) {
+export function TenantSwitcher({ collapsed, inTopbar = false }: { collapsed?: boolean; inTopbar?: boolean }) {
   const [open, setOpen] = useState(false);
   const { currentTenant, switchTenant } = useSessionStore();
 
@@ -29,7 +29,7 @@ export function TenantSwitcher({ collapsed }: { collapsed?: boolean }) {
           aria-expanded={open}
           className={cn(
             "justify-between border-border/50 bg-secondary/50 hover:bg-secondary",
-            collapsed ? "w-10 px-0" : "w-full"
+            collapsed ? "w-10 px-0" : inTopbar ? "w-56" : "w-full"
           )}
         >
           <div className="flex items-center gap-2 truncate">

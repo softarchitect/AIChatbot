@@ -8,16 +8,20 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { permissions, rolePermissions, type Role } from "@/lib/mock/data";
+import { useSessionStore } from "@/lib/store";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 const roles: Role[] = ["admin", "supervisor", "agent"];
 
 export default function RolesPermissionsPage() {
+  const hasPermission = useSessionStore((s) => s.hasPermission);
   const [matrix, setMatrix] = useState<Record<Role, string[]>>(() => ({ ...rolePermissions }));
   const [hasChanges, setHasChanges] = useState(false);
+  const canManageRoles = hasPermission("manage_roles");
 
   const togglePermission = (role: Role, permKey: string) => {
+    if (!canManageRoles) return;
     if (role === "admin") return; // Admin always has all perms
     setMatrix((prev) => {
       const current = prev[role];
@@ -59,7 +63,7 @@ export default function RolesPermissionsPage() {
               </Badge>
             </motion.div>
           )}
-          <Button onClick={handleSave} disabled={!hasChanges} className="gap-2">
+          <Button onClick={handleSave} disabled={!hasChanges || !canManageRoles} className="gap-2">
             <Save className="h-4 w-4" />
             Save Changes
           </Button>
@@ -100,9 +104,9 @@ export default function RolesPermissionsPage() {
                             <Checkbox
                               checked={matrix[role].includes(perm.key)}
                               onCheckedChange={() => togglePermission(role, perm.key)}
-                              disabled={role === "admin"}
+                              disabled={role === "admin" || !canManageRoles}
                               className={cn(
-                                role === "admin" && "opacity-50 cursor-not-allowed"
+                                (role === "admin" || !canManageRoles) && "opacity-50 cursor-not-allowed"
                               )}
                             />
                           </td>

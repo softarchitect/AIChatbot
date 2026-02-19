@@ -1,0 +1,85 @@
+{
+  "app": {
+    "name": "SaaSphere"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "tenants": "Tenants",
+    "profile": "Profile",
+    "channels": "Channels",
+    "settings": "Settings",
+    "logout": "Log Out"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "welcome": "Welcome back",
+    "active_users": "Active Users",
+    "total_tenants": "Total Tenants",
+    "current_plan": "Current Plan",
+    "security_score": "Security Score",
+    "quick_actions": "Quick Actions",
+    "create_tenant": "Create Tenant",
+    "invite_user": "Invite User",
+    "generate_key": "Generate API Key",
+    "activity": "Recent Activity",
+    "usage_trend": "Usage Trend",
+    "active_users_chart": "Active Users This Week"
+  },
+  "tenants": {
+    "title": "Tenants",
+    "create": "Create Tenant",
+    "search": "Search tenants...",
+    "empty": "No tenants found",
+    "empty_desc": "Get started by creating your first tenant."
+  },
+  "tenant": {
+    "overview": "Overview",
+    "users": "Users",
+    "roles": "Roles & Permissions",
+    "flags": "Feature Flags",
+    "branding": "White-Label",
+    "security": "Security",
+    "api_keys": "API Keys",
+    "audit": "Audit Logs"
+  },
+  "common": {
+    "save": "Save Changes",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "view": "View",
+    "disable": "Disable",
+    "enable": "Enable",
+    "search": "Search...",
+    "filter": "Filter",
+    "export": "Export",
+    "loading": "Loading...",
+    "confirm": "Confirm",
+    "back": "Back",
+    "next": "Next",
+    "create": "Create",
+    "invite": "Invite",
+    "revoke": "Revoke",
+    "copy": "Copy",
+    "copied": "Copied!",
+    "unsaved": "Unsaved changes"
+  },
+  "auth": {
+    "login": "Sign In",
+    "email": "Email address",
+    "password": "Password",
+    "forgot": "Forgot password?",
+    "google": "Continue with Google",
+    "microsoft": "Continue with Microsoft",
+    "welcome": "Welcome back",
+    "subtitle": "Sign in to your account to continue"
+  },
+  "phase2": {
+    "title": "Coming in Phase 2",
+    "desc": "This feature is not yet available.",
+    "locked": "Upgrade your plan to access this feature."
+  },
+  "rbac": {
+    "no_permission": "Insufficient permissions"
+  }
+}

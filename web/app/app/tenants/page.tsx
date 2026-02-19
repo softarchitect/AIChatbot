@@ -53,8 +53,8 @@ import { toast } from "sonner";
 
 export default function TenantsPage() {
   const router = useRouter();
-  const { locale, hasPermission } = useSessionStore();
-  const { t } = useTranslation(locale);
+  const { hasPermission } = useSessionStore();
+  const { t } = useTranslation();
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [planFilter, setPlanFilter] = useState<string>("all");
