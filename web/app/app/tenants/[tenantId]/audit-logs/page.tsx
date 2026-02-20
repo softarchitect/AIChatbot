@@ -21,14 +21,16 @@ import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/shared";
 import { DataTable } from "@/components/data-table";
 import { AuditLogDetailDrawer } from "@/components/audit-log-detail-drawer";
-import { auditLogs, type AuditLog } from "@/lib/mock/data";
+import { auditLogs as mockAuditLogs, type AuditLog } from "@/lib/mock/data";
 import { useSessionStore } from "@/lib/store";
 import { toast } from "sonner";
 
 export default function AuditLogsPage() {
   const hasPermission = useSessionStore((s) => s.hasPermission);
+  const accessToken = useSessionStore((s) => s.accessToken);
   const params = useParams();
   const tenantId = params.tenantId as string;
+  const [logs, setLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [actionFilter, setActionFilter] = useState("all");
@@ -36,12 +38,37 @@ export default function AuditLogsPage() {
   const canViewAuditLogs = hasPermission("view_audit_logs");
   const canExportAuditLogs = hasPermission("export_audit_logs");
 
-  const logs = auditLogs.filter((l) => l.tenantId === tenantId);
-
   useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 500);
-    return () => clearTimeout(timer);
-  }, []);
+    const useApi = process.env.NEXT_PUBLIC_USE_API_AUTH === "true";
+
+    async function loadLogs() {
+      if (!useApi || !accessToken) {
+        setLogs(mockAuditLogs.filter((l) => l.tenantId === tenantId));
+        setLoading(false);
+        return;
+      }
+      try {
+        const response = await fetch(`/api/v1/tenants/${tenantId}/audit-logs`, {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "x-tenant-id": tenantId,
+          },
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(result?.error ?? "Failed to load audit logs");
+        }
+        setLogs(result.data ?? []);
+      } catch (error) {
+        console.error(error);
+        toast.error("Failed to load audit logs.");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    void loadLogs();
+  }, [accessToken, tenantId]);
 
   const actions = useMemo(
     () => Array.from(new Set(logs.map((l) => l.action))),

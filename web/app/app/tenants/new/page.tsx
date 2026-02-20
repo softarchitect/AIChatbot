@@ -35,6 +35,7 @@ type CreateTenantForm = z.infer<typeof createTenantSchema>;
 
 export default function CreateTenantPage() {
   const hasPermission = useSessionStore((s) => s.hasPermission);
+  const accessToken = useSessionStore((s) => s.accessToken);
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const canManageTenants = hasPermission("manage_tenants");
@@ -55,10 +56,40 @@ export default function CreateTenantPage() {
 
   const onSubmit = async (data: CreateTenantForm) => {
     setSubmitting(true);
-    await new Promise((r) => setTimeout(r, 1500));
-    toast.success(`Tenant "${data.name}" created successfully!`);
-    setSubmitting(false);
-    router.push("/app/tenants");
+    const useApi = process.env.NEXT_PUBLIC_USE_API_AUTH === "true";
+    try {
+      if (useApi && accessToken) {
+        const response = await fetch("/api/v1/tenants", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({
+            name: data.name,
+            domain: data.domain,
+            adminEmail: data.adminEmail,
+            language: data.language,
+            timezone: data.timezone,
+            plan: data.plan,
+          }),
+        });
+        const raw = await response.text();
+        const result = raw ? JSON.parse(raw) : {};
+        if (!response.ok) {
+          throw new Error(result?.error ?? `Failed to create tenant (HTTP ${response.status})`);
+        }
+      } else {
+        await new Promise((r) => setTimeout(r, 1500));
+      }
+      toast.success(`Tenant "${data.name}" created successfully!`);
+      router.push("/app/tenants");
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : "Failed to create tenant.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (

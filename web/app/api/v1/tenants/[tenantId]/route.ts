@@ -12,6 +12,11 @@ const updateSchema = z
     language: z.string().optional(),
     timezone: z.string().optional(),
     customDomain: z.string().optional(),
+    logoUrl: z.string().optional(),
+    primaryColor: z.string().optional(),
+    accentColor: z.string().optional(),
+    headerText: z.string().optional(),
+    welcomeMessage: z.string().optional(),
   })
   .refine((obj) => Object.keys(obj).length > 0, "At least one field is required.");
 
@@ -23,7 +28,7 @@ export async function GET(req: NextRequest, context: { params: Promise<{ tenantI
   const tenantError = requireTenantAccess(req, auth, tenantId);
   if (tenantError) return tenantError;
 
-  const tenant = await findTenantById(tenantId);
+  const tenant = await findTenantById(tenantId, { role: auth.role, tenantId });
   if (!tenant) {
     return NextResponse.json({ error: "Tenant not found." }, { status: 404 });
   }
@@ -35,10 +40,9 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ tenan
   const auth = await requireAuth(req);
   if (auth instanceof NextResponse) return auth;
 
-  const permissionError = requirePermission(auth, "manage_tenants");
-  if (permissionError) return permissionError;
-
   const { tenantId } = await context.params;
+  const permissionError = await requirePermission(auth, "manage_tenants", tenantId);
+  if (permissionError) return permissionError;
   const tenantError = requireTenantAccess(req, auth, tenantId);
   if (tenantError) return tenantError;
 
@@ -48,7 +52,7 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ tenan
     return NextResponse.json({ error: "Invalid update payload.", details: parsed.error.flatten() }, { status: 400 });
   }
 
-  const updated = await updateTenant(tenantId, parsed.data);
+  const updated = await updateTenant(tenantId, parsed.data, { role: auth.role, tenantId });
   if (!updated) {
     return NextResponse.json({ error: "Tenant not found." }, { status: 404 });
   }
@@ -60,7 +64,7 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ tenan
     action: "tenant.updated",
     target: updated.name,
     details: parsed.data,
-  });
+  }, { role: auth.role, tenantId });
 
   return NextResponse.json({ data: updated });
 }
@@ -69,14 +73,13 @@ export async function DELETE(req: NextRequest, context: { params: Promise<{ tena
   const auth = await requireAuth(req);
   if (auth instanceof NextResponse) return auth;
 
-  const permissionError = requirePermission(auth, "manage_tenants");
-  if (permissionError) return permissionError;
-
   const { tenantId } = await context.params;
+  const permissionError = await requirePermission(auth, "manage_tenants", tenantId);
+  if (permissionError) return permissionError;
   const tenantError = requireTenantAccess(req, auth, tenantId);
   if (tenantError) return tenantError;
 
-  const deleted = await deleteTenant(tenantId);
+  const deleted = await deleteTenant(tenantId, { role: auth.role, tenantId });
   if (!deleted) {
     return NextResponse.json({ error: "Tenant not found." }, { status: 404 });
   }
@@ -88,7 +91,7 @@ export async function DELETE(req: NextRequest, context: { params: Promise<{ tena
     action: "tenant.deleted",
     target: deleted.name,
     details: { status: "suspended" },
-  });
+  }, { role: auth.role, tenantId });
 
   return NextResponse.json({ data: deleted });
 }

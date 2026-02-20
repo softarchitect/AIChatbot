@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import {
   Search,
@@ -48,14 +48,17 @@ import {
 } from "@/components/shared";
 import { useSessionStore } from "@/lib/store";
 import { useTranslation } from "@/lib/i18n";
-import { tenants, type Tenant } from "@/lib/mock/data";
+import { tenants as mockTenants, type Tenant } from "@/lib/mock/data";
 import { toast } from "sonner";
 
 export default function TenantsPage() {
   const router = useRouter();
-  const { hasPermission } = useSessionStore();
+  const searchParams = useSearchParams();
+  const updated = searchParams.get("updated");
+  const { hasPermission, accessToken } = useSessionStore();
   const { t } = useTranslation();
   const [loading, setLoading] = useState(true);
+  const [tenantRows, setTenantRows] = useState<Tenant[]>([]);
   const [search, setSearch] = useState("");
   const [planFilter, setPlanFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -64,12 +67,46 @@ export default function TenantsPage() {
   const perPage = 5;
 
   useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 600);
-    return () => clearTimeout(timer);
-  }, []);
+    const useApi = process.env.NEXT_PUBLIC_USE_API_AUTH === "true";
+
+    async function loadTenants() {
+      if (!useApi || !accessToken) {
+        setTenantRows(mockTenants);
+        setLoading(false);
+        return;
+      }
+      try {
+        const response = await fetch("/api/v1/tenants", {
+          cache: "no-store",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        });
+        const result = await response.json();
+        if (!response.ok) {
+          throw new Error(result?.error ?? "Failed to load tenants");
+        }
+        setTenantRows(result.data ?? []);
+      } catch (error) {
+        console.error(error);
+        toast.error("Failed to load tenants.");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    void loadTenants();
+  }, [accessToken, updated]);
+
+  useEffect(() => {
+    if (updated === "1") {
+      toast.success("Tenant list refreshed with latest changes.");
+      router.replace("/app/tenants");
+    }
+  }, [updated, router]);
 
   const filtered = useMemo(() => {
-    return tenants.filter((t) => {
+    return tenantRows.filter((t) => {
       const matchSearch =
         t.name.toLowerCase().includes(search.toLowerCase()) ||
         t.domain.toLowerCase().includes(search.toLowerCase());
@@ -77,14 +114,34 @@ export default function TenantsPage() {
       const matchStatus = statusFilter === "all" || t.status === statusFilter;
       return matchSearch && matchPlan && matchStatus;
     });
-  }, [search, planFilter, statusFilter]);
+  }, [tenantRows, search, planFilter, statusFilter]);
 
   const paginated = filtered.slice((page - 1) * perPage, page * perPage);
   const totalPages = Math.ceil(filtered.length / perPage);
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (deleteTarget) {
-      toast.success(`Tenant "${deleteTarget.name}" deleted successfully.`);
+      const useApi = process.env.NEXT_PUBLIC_USE_API_AUTH === "true";
+      try {
+        if (useApi && accessToken) {
+          const response = await fetch(`/api/v1/tenants/${deleteTarget.id}`, {
+            method: "DELETE",
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "x-tenant-id": deleteTarget.id,
+            },
+          });
+          const result = await response.json();
+          if (!response.ok) {
+            throw new Error(result?.error ?? "Delete failed");
+          }
+        }
+        setTenantRows((prev) => prev.filter((t) => t.id !== deleteTarget.id));
+        toast.success(`Tenant "${deleteTarget.name}" deleted successfully.`);
+      } catch (error) {
+        console.error(error);
+        toast.error("Failed to delete tenant.");
+      }
       setDeleteTarget(null);
     }
   };
@@ -218,11 +275,42 @@ export default function TenantsPage() {
                             <Eye className="mr-2 h-4 w-4" />
                             {t("common.view")}
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={(e) => { e.stopPropagation(); router.push(`/app/tenants/${tenant.id}/overview`); }}>
+                          <DropdownMenuItem onClick={(e) => { e.stopPropagation(); router.push(`/app/tenants/${tenant.id}/edit`); }}>
                             <Pencil className="mr-2 h-4 w-4" />
                             {t("common.edit")}
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={(e) => { e.stopPropagation(); toast.success(`Tenant "${tenant.name}" disabled.`); }}>
+                          <DropdownMenuItem
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              const useApi = process.env.NEXT_PUBLIC_USE_API_AUTH === "true";
+                              try {
+                                if (useApi && accessToken) {
+                                  const response = await fetch(`/api/v1/tenants/${tenant.id}`, {
+                                    method: "PATCH",
+                                    headers: {
+                                      "Content-Type": "application/json",
+                                      Authorization: `Bearer ${accessToken}`,
+                                      "x-tenant-id": tenant.id,
+                                    },
+                                    body: JSON.stringify({ status: "suspended" }),
+                                  });
+                                  const result = await response.json();
+                                  if (!response.ok) {
+                                    throw new Error(result?.error ?? "Disable failed");
+                                  }
+                                }
+                                setTenantRows((prev) =>
+                                  prev.map((t) =>
+                                    t.id === tenant.id ? { ...t, status: "suspended" } : t
+                                  )
+                                );
+                                toast.success(`Tenant "${tenant.name}" disabled.`);
+                              } catch (error) {
+                                console.error(error);
+                                toast.error("Failed to disable tenant.");
+                              }
+                            }}
+                          >
                             <Ban className="mr-2 h-4 w-4" />
                             {t("common.disable")}
                           </DropdownMenuItem>

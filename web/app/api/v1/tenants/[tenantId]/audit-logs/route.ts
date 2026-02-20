@@ -6,10 +6,9 @@ export async function GET(req: NextRequest, context: { params: Promise<{ tenantI
   const auth = await requireAuth(req);
   if (auth instanceof NextResponse) return auth;
 
-  const permissionError = requirePermission(auth, "view_audit_logs");
-  if (permissionError) return permissionError;
-
   const { tenantId } = await context.params;
+  const permissionError = await requirePermission(auth, "view_audit_logs", tenantId);
+  if (permissionError) return permissionError;
   const tenantError = requireTenantAccess(req, auth, tenantId);
   if (tenantError) return tenantError;
 
@@ -17,7 +16,7 @@ export async function GET(req: NextRequest, context: { params: Promise<{ tenantI
   const actor = searchParams.get("actor")?.toLowerCase() ?? "";
   const action = searchParams.get("action")?.toLowerCase() ?? "";
 
-  let logs = await listAuditLogs(tenantId);
+  let logs = await listAuditLogs(tenantId, { role: auth.role, tenantId });
   if (actor) {
     logs = logs.filter((l) => l.actor.toLowerCase().includes(actor));
   }

@@ -34,7 +34,12 @@ export function AppSidebar() {
   const { t } = useTranslation();
 
   const tenantId = currentTenant?.id ?? "t1";
-  const channelsEnabled = hasFeatureEnabled("whatsapp_channel") || hasFeatureEnabled("sms_channel") || hasFeatureEnabled("email_channel");
+  const channelsEnabled =
+    hasFeatureEnabled("webchat_widget") ||
+    hasFeatureEnabled("whatsapp_channel") ||
+    hasFeatureEnabled("sms_channel") ||
+    hasFeatureEnabled("email_channel") ||
+    hasFeatureEnabled("voice_channel");
 
   const navItems: NavItem[] = [
     { label: t("nav.dashboard"), href: "/app/dashboard", icon: LayoutDashboard },

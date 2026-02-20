@@ -21,9 +21,10 @@ type LoginForm = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login, isLoading } = useSessionStore();
+  const { login, oauthLogin, isLoading } = useSessionStore();
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
+  const [oauthLoading, setOauthLoading] = useState<"google" | "microsoft" | null>(null);
 
   const {
     register,
@@ -44,6 +45,116 @@ export default function LoginPage() {
       router.push("/app/dashboard");
     } else {
       setError("Invalid credentials. Please try again.");
+    }
+  };
+
+  const loadGoogleScript = async () => {
+    if (typeof window === "undefined") return;
+    if ((window as unknown as { google?: unknown }).google) return;
+    await new Promise<void>((resolve, reject) => {
+      const existing = document.querySelector<HTMLScriptElement>("script[data-google-identity='true']");
+      if (existing) {
+        existing.addEventListener("load", () => resolve(), { once: true });
+        existing.addEventListener("error", () => reject(new Error("Failed to load Google script.")), {
+          once: true,
+        });
+        return;
+      }
+      const script = document.createElement("script");
+      script.src = "https://accounts.google.com/gsi/client";
+      script.async = true;
+      script.defer = true;
+      script.dataset.googleIdentity = "true";
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error("Failed to load Google script."));
+      document.head.appendChild(script);
+    });
+  };
+
+  const getGoogleIdToken = async () => {
+    const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+    if (!clientId) {
+      throw new Error("NEXT_PUBLIC_GOOGLE_CLIENT_ID is missing.");
+    }
+    await loadGoogleScript();
+    const google = (window as unknown as { google?: any }).google;
+    if (!google?.accounts?.id) {
+      throw new Error("Google Identity is unavailable.");
+    }
+    return await new Promise<string>((resolve, reject) => {
+      const timeout = window.setTimeout(
+        () => reject(new Error("Google sign-in timed out. Please try again.")),
+        60000
+      );
+      google.accounts.id.initialize({
+        client_id: clientId,
+        callback: (response: { credential?: string }) => {
+          window.clearTimeout(timeout);
+          if (!response?.credential) {
+            reject(new Error("Google did not return an ID token."));
+            return;
+          }
+          resolve(response.credential);
+        },
+      });
+      google.accounts.id.prompt();
+    });
+  };
+
+  const onGoogleOAuth = async () => {
+    setError("");
+    setOauthLoading("google");
+    try {
+      const idToken = await getGoogleIdToken();
+      const success = await oauthLogin("google", idToken);
+      if (!success) {
+        setError("Google sign-in failed. Ensure your email is onboarded in this system.");
+        return;
+      }
+      router.push("/app/dashboard");
+    } catch (oauthError) {
+      const message = oauthError instanceof Error ? oauthError.message : "Google sign-in failed.";
+      setError(message);
+    } finally {
+      setOauthLoading(null);
+    }
+  };
+
+  const onMicrosoftOAuth = async () => {
+    setError("");
+    setOauthLoading("microsoft");
+    try {
+      const clientId = process.env.NEXT_PUBLIC_MICROSOFT_CLIENT_ID;
+      if (!clientId) {
+        throw new Error("NEXT_PUBLIC_MICROSOFT_CLIENT_ID is missing.");
+      }
+      const { PublicClientApplication } = await import("@azure/msal-browser");
+      const msalApp = new PublicClientApplication({
+        auth: {
+          clientId,
+          authority: "https://login.microsoftonline.com/common",
+        },
+      });
+      await msalApp.initialize();
+      const result = await msalApp.loginPopup({
+        scopes: ["openid", "profile", "email", "User.Read"],
+        prompt: "select_account",
+      });
+      if (!result.idToken) {
+        throw new Error("Microsoft did not return an ID token.");
+      }
+      const success = await oauthLogin("microsoft", result.idToken);
+      if (!success) {
+        setError("Microsoft sign-in failed. Ensure your email is onboarded in this system.");
+        return;
+      }
+      router.push("/app/dashboard");
+    } catch (oauthError) {
+      const message =
+        oauthError instanceof Error ? oauthError.message : "Microsoft sign-in failed.";
+      setError(message);
+    } finally {
+      setOauthLoading(null);
     }
   };
 
@@ -130,7 +241,13 @@ export default function LoginPage() {
 
           {/* OAuth Buttons */}
           <div className="mt-8 flex flex-col gap-3">
-            <Button variant="outline" className="w-full gap-3 h-11" type="button">
+            <Button
+              variant="outline"
+              className="w-full gap-3 h-11"
+              type="button"
+              onClick={onGoogleOAuth}
+              disabled={isLoading || oauthLoading !== null}
+            >
               <svg className="h-5 w-5" viewBox="0 0 24 24">
                 <path
                   fill="currentColor"
@@ -149,13 +266,33 @@ export default function LoginPage() {
                   d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
                 />
               </svg>
-              Continue with Google
+              {oauthLoading === "google" ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Connecting Google...
+                </>
+              ) : (
+                "Continue with Google"
+              )}
             </Button>
-            <Button variant="outline" className="w-full gap-3 h-11" type="button">
+            <Button
+              variant="outline"
+              className="w-full gap-3 h-11"
+              type="button"
+              onClick={onMicrosoftOAuth}
+              disabled={isLoading || oauthLoading !== null}
+            >
               <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M11.4 24H0V12.6h11.4V24zM24 24H12.6V12.6H24V24zM11.4 11.4H0V0h11.4v11.4zM24 11.4H12.6V0H24v11.4z" />
               </svg>
-              Continue with Microsoft
+              {oauthLoading === "microsoft" ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Connecting Microsoft...
+                </>
+              ) : (
+                "Continue with Microsoft"
+              )}
             </Button>
           </div>
 

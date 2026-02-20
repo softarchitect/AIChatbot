@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { Save, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -16,9 +17,41 @@ const roles: Role[] = ["admin", "supervisor", "agent"];
 
 export default function RolesPermissionsPage() {
   const hasPermission = useSessionStore((s) => s.hasPermission);
+  const accessToken = useSessionStore((s) => s.accessToken);
+  const params = useParams();
+  const tenantId = params.tenantId as string;
   const [matrix, setMatrix] = useState<Record<Role, string[]>>(() => ({ ...rolePermissions }));
   const [hasChanges, setHasChanges] = useState(false);
+  const [loading, setLoading] = useState(true);
   const canManageRoles = hasPermission("manage_roles");
+
+  useEffect(() => {
+    const useApi = process.env.NEXT_PUBLIC_USE_API_AUTH === "true";
+    async function loadMatrix() {
+      if (!useApi || !accessToken) {
+        setLoading(false);
+        return;
+      }
+      try {
+        const response = await fetch(`/api/v1/tenants/${tenantId}/roles-permissions`, {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "x-tenant-id": tenantId,
+          },
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || !result?.data) {
+          throw new Error(result?.error ?? "Failed to load permissions");
+        }
+        setMatrix(result.data as Record<Role, string[]>);
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Failed to load role permissions.");
+      } finally {
+        setLoading(false);
+      }
+    }
+    void loadMatrix();
+  }, [accessToken, tenantId]);
 
   const togglePermission = (role: Role, permKey: string) => {
     if (!canManageRoles) return;
@@ -33,9 +66,32 @@ export default function RolesPermissionsPage() {
     setHasChanges(true);
   };
 
-  const handleSave = () => {
-    toast.success("Permissions saved successfully.");
-    setHasChanges(false);
+  const handleSave = async () => {
+    const useApi = process.env.NEXT_PUBLIC_USE_API_AUTH === "true";
+    if (!useApi || !accessToken) {
+      toast.success("Permissions saved successfully.");
+      setHasChanges(false);
+      return;
+    }
+    try {
+      const response = await fetch(`/api/v1/tenants/${tenantId}/roles-permissions`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+          "x-tenant-id": tenantId,
+        },
+        body: JSON.stringify(matrix),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(result?.error ?? "Failed to save role permissions");
+      }
+      toast.success("Permissions saved successfully.");
+      setHasChanges(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to save role permissions.");
+    }
   };
 
   // Group permissions by group
@@ -43,6 +99,11 @@ export default function RolesPermissionsPage() {
 
   return (
     <div className="space-y-6">
+      {loading ? (
+        <Card className="border-border">
+          <CardContent className="py-8 text-sm text-muted-foreground">Loading role permissions...</CardContent>
+        </Card>
+      ) : null}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-lg font-semibold text-foreground">Roles & Permissions</h2>

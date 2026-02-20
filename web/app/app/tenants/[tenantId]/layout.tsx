@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useParams, usePathname, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
@@ -13,17 +14,25 @@ import {
   FileText,
   ArrowLeft,
   Copy,
+  Loader2,
+  Pencil,
+  MessageSquare,
+  Megaphone,
+  Receipt,
+  UserCog,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { StatusPill, PlanBadge } from "@/components/shared";
-import { tenants } from "@/lib/mock/data";
+import type { Tenant } from "@/lib/mock/data";
+import { useSessionStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 const tabs = [
   { label: "Overview", href: "overview", icon: LayoutDashboard },
+  { label: "Edit", href: "edit", icon: Pencil },
   { label: "Users", href: "users", icon: Users },
   { label: "Roles & Permissions", href: "roles-permissions", icon: Shield },
   { label: "Feature Flags", href: "feature-flags", icon: Flag },
@@ -31,14 +40,58 @@ const tabs = [
   { label: "Security", href: "security", icon: Lock },
   { label: "API Keys", href: "api-keys", icon: Key },
   { label: "Audit Logs", href: "audit-logs", icon: FileText },
+  { label: "Conversations", href: "conversations", icon: MessageSquare },
+  { label: "Campaigns", href: "campaigns", icon: Megaphone },
+  { label: "Billing", href: "billing", icon: Receipt },
+  { label: "Agents", href: "agents", icon: UserCog },
 ];
 
 export default function TenantDetailLayout({ children }: { children: React.ReactNode }) {
   const params = useParams();
   const pathname = usePathname();
   const router = useRouter();
+  const accessToken = useSessionStore((s) => s.accessToken);
   const tenantId = params.tenantId as string;
-  const tenant = tenants.find((t) => t.id === tenantId);
+  const [tenant, setTenant] = useState<Tenant | null>(null);
+  const [loadingTenant, setLoadingTenant] = useState(true);
+
+  useEffect(() => {
+    const useApi = process.env.NEXT_PUBLIC_USE_API_AUTH === "true";
+
+    async function loadTenant() {
+      if (!useApi || !accessToken) {
+        setLoadingTenant(false);
+        return;
+      }
+      try {
+        const response = await fetch(`/api/v1/tenants/${tenantId}`, {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "x-tenant-id": tenantId,
+          },
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(result?.error ?? "Failed to load tenant");
+        }
+        setTenant(result.data ?? null);
+      } catch {
+        setTenant(null);
+      } finally {
+        setLoadingTenant(false);
+      }
+    }
+
+    void loadTenant();
+  }, [accessToken, tenantId]);
+
+  if (loadingTenant) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   if (!tenant) {
     return (

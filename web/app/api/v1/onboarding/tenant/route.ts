@@ -28,7 +28,7 @@ async function authorizeOnboarding(req: NextRequest) {
 
   const auth = await requireAuth(req);
   if (auth instanceof NextResponse) return auth;
-  const permissionError = requirePermission(auth, "manage_tenants");
+  const permissionError = await requirePermission(auth, "manage_tenants");
   if (permissionError) return permissionError;
 
   return {
@@ -50,22 +50,37 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid onboarding payload.", details: parsed.error.flatten() }, { status: 400 });
   }
 
-  const tenant = await addTenant(parsed.data);
-  await addAuditLog({
-    tenantId: tenant.id,
-    actor: authResult.actor,
-    actorEmail: authResult.actorEmail,
-    action: "tenant.onboarding_created",
-    target: tenant.name,
-    details: { domain: tenant.domain, plan: tenant.plan },
-  });
-
-  return NextResponse.json({
-    data: {
+  try {
+    const tenant = await addTenant(parsed.data, { role: "admin" });
+    await addAuditLog({
       tenantId: tenant.id,
-      name: tenant.name,
-      domain: tenant.domain,
-      status: tenant.status,
-    },
-  }, { status: 201 });
+      actor: authResult.actor,
+      actorEmail: authResult.actorEmail,
+      action: "tenant.onboarding_created",
+      target: tenant.name,
+      details: { domain: tenant.domain, plan: tenant.plan },
+    }, { role: "admin", tenantId: tenant.id });
+
+    return NextResponse.json({
+      data: {
+        tenantId: tenant.id,
+        name: tenant.name,
+        domain: tenant.domain,
+        status: tenant.status,
+      },
+    }, { status: 201 });
+  } catch (error: unknown) {
+    const code = (error as { code?: string })?.code;
+    if (code === "23505") {
+      return NextResponse.json(
+        { error: "Tenant domain already exists. Please use a different domain." },
+        { status: 409 }
+      );
+    }
+
+    return NextResponse.json(
+      { error: "Failed to onboard tenant. Please try again." },
+      { status: 500 }
+    );
+  }
 }

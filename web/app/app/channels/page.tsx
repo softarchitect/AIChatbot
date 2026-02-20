@@ -15,6 +15,7 @@ const channels = [
   { name: "WebChat", slug: "webchat", feature: "webchat_widget", icon: Globe, color: "text-primary" },
   { name: "SMS", slug: "sms", feature: "sms_channel", icon: Phone, color: "text-chart-3" },
   { name: "Email", slug: "email", feature: "email_channel", icon: Mail, color: "text-chart-2" },
+  { name: "Voice", slug: "voice", feature: "voice_channel", icon: Phone, color: "text-chart-4" },
 ];
 
 export default function ChannelsPage() {
@@ -43,7 +44,7 @@ export default function ChannelsPage() {
               Channel Management
             </h1>
             <p className="mx-auto max-w-md leading-relaxed text-muted-foreground">
-              {t("phase2.desc")} Manage WhatsApp, WebChat, SMS, and Email channels
+              {t("phase2.desc")} Manage WhatsApp, WebChat, SMS, Email, and Voice channels
               all from one unified dashboard.
             </p>
           </div>

@@ -1,10 +1,23 @@
 import type { Role } from "@/lib/mock/data";
 
-const rolePermissionsMap: Record<Role, string[]> = {
+export const rolePermissionsMap: Record<Role, string[]> = {
   admin: [
     "view_users",
     "edit_users",
     "manage_roles",
+    "view_workflows",
+    "manage_workflows",
+    "view_analytics",
+    "manage_analytics",
+    "view_conversations",
+    "manage_conversations",
+    "manage_escalations",
+    "view_ai_config",
+    "manage_ai_config",
+    "view_integrations",
+    "manage_integrations",
+    "view_channels",
+    "manage_channels",
     "view_feature_flags",
     "manage_feature_flags",
     "view_audit_logs",
@@ -20,12 +33,29 @@ const rolePermissionsMap: Record<Role, string[]> = {
   supervisor: [
     "view_users",
     "edit_users",
+    "view_workflows",
+    "view_analytics",
+    "view_conversations",
+    "manage_conversations",
+    "manage_escalations",
+    "view_channels",
+    "view_ai_config",
     "view_feature_flags",
     "view_audit_logs",
     "view_api_keys",
     "manage_branding",
+    "view_tenants",
   ],
-  agent: ["view_users", "view_feature_flags", "view_audit_logs", "view_api_keys"],
+  agent: [
+    "view_users",
+    "view_conversations",
+    "manage_conversations",
+    "view_channels",
+    "view_ai_config",
+    "view_feature_flags",
+    "view_audit_logs",
+    "view_api_keys",
+  ],
 };
 
 export function hasPermission(role: Role, permission: string): boolean {

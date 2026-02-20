@@ -1,33 +1,124 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { Upload, Globe, ArrowLeftRight, Save } from "lucide-react";
+import { Upload, Globe, ArrowLeftRight, Save, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
-import { tenants } from "@/lib/mock/data";
+import type { Tenant } from "@/lib/mock/data";
 import { useSessionStore } from "@/lib/store";
 import { BrandingPreviewCard } from "@/components/branding-preview-card";
 import { toast } from "sonner";
 
 export default function WhiteLabelPage() {
   const hasPermission = useSessionStore((s) => s.hasPermission);
+  const accessToken = useSessionStore((s) => s.accessToken);
   const params = useParams();
-  const tenant = tenants.find((t) => t.id === params.tenantId);
+  const tenantId = params.tenantId as string;
+  const [tenant, setTenant] = useState<Tenant | null>(null);
+  const [loadingTenant, setLoadingTenant] = useState(true);
+  const [saving, setSaving] = useState(false);
   const canManageBranding = hasPermission("manage_branding");
 
-  const [primaryColor, setPrimaryColor] = useState(tenant?.primaryColor ?? "#2563eb");
-  const [accentColor, setAccentColor] = useState(tenant?.accentColor ?? "#06b6d4");
-  const [headerText, setHeaderText] = useState(tenant?.headerText ?? "");
-  const [welcomeMessage, setWelcomeMessage] = useState(tenant?.welcomeMessage ?? "");
-  const [customDomain, setCustomDomain] = useState(tenant?.customDomain ?? "");
+  const [primaryColor, setPrimaryColor] = useState("#2563eb");
+  const [accentColor, setAccentColor] = useState("#06b6d4");
+  const [headerText, setHeaderText] = useState("");
+  const [welcomeMessage, setWelcomeMessage] = useState("");
+  const [customDomain, setCustomDomain] = useState("");
+  const [logoUrl, setLogoUrl] = useState("");
   const [rtlPreview, setRtlPreview] = useState(false);
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
 
-  if (!tenant) return null;
+  useEffect(() => {
+    const useApi = process.env.NEXT_PUBLIC_USE_API_AUTH === "true";
+
+    async function loadTenant() {
+      if (!useApi || !accessToken) {
+        setLoadingTenant(false);
+        return;
+      }
+      try {
+        const response = await fetch(`/api/v1/tenants/${tenantId}`, {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "x-tenant-id": tenantId,
+          },
+        });
+        const result = await response.json().catch(() => ({}));
+        if (response.ok && result?.data) {
+          const t = result.data as Tenant;
+          setTenant(t);
+          setPrimaryColor(t.primaryColor);
+          setAccentColor(t.accentColor);
+          setHeaderText(t.headerText ?? "");
+          setWelcomeMessage(t.welcomeMessage ?? "");
+          setCustomDomain(t.customDomain ?? "");
+          setLogoUrl(t.logoUrl ?? "");
+          setLastSavedAt(new Date());
+        }
+      } finally {
+        setLoadingTenant(false);
+      }
+    }
+
+    void loadTenant();
+  }, [accessToken, tenantId]);
+
+  if (loadingTenant) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!tenant) return <p className="py-12 text-sm text-muted-foreground">Tenant data is unavailable.</p>;
+
+  const saveBranding = async () => {
+    const useApi = process.env.NEXT_PUBLIC_USE_API_AUTH === "true";
+    if (!useApi || !accessToken) {
+      toast.error("API mode is not enabled.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const response = await fetch(`/api/v1/tenants/${tenantId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+          "x-tenant-id": tenantId,
+        },
+        body: JSON.stringify({
+          primaryColor,
+          accentColor,
+          headerText,
+          welcomeMessage,
+          customDomain,
+          logoUrl,
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(result?.error ?? "Failed to save branding");
+      }
+      if (result?.data) {
+        setTenant(result.data as Tenant);
+        setLastSavedAt(new Date());
+      }
+      toast.success("Branding saved successfully.");
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : "Failed to save branding.");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -37,13 +128,18 @@ export default function WhiteLabelPage() {
           <p className="text-sm text-muted-foreground">
             Customize the branding and appearance for this tenant.
           </p>
+          {lastSavedAt ? (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Last saved: {lastSavedAt.toLocaleString()}
+            </p>
+          ) : null}
         </div>
         <Button
-          onClick={() => toast.success("Branding saved successfully.")}
+          onClick={() => void saveBranding()}
           className="gap-2"
-          disabled={!canManageBranding}
+          disabled={!canManageBranding || saving}
         >
-          <Save className="h-4 w-4" />
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
           Save Changes
         </Button>
       </div>
@@ -62,11 +158,17 @@ export default function WhiteLabelPage() {
                 <div className="flex h-20 w-20 items-center justify-center rounded-xl border-2 border-dashed border-border bg-muted/50">
                   <Upload className="h-6 w-6 text-muted-foreground" />
                 </div>
-                <div>
-                  <Button variant="outline" size="sm">
+                <div className="w-full space-y-2">
+                  <Button variant="outline" size="sm" disabled>
                     Upload Logo
                   </Button>
-                  <p className="mt-1 text-xs text-muted-foreground">Max 2MB, 200x200px</p>
+                  <p className="text-xs text-muted-foreground">Max 2MB, 200x200px</p>
+                  <Input
+                    value={logoUrl}
+                    onChange={(e) => setLogoUrl(e.target.value)}
+                    placeholder="https://cdn.yourdomain.com/logo.png"
+                    disabled={!canManageBranding}
+                  />
                 </div>
               </div>
             </CardContent>

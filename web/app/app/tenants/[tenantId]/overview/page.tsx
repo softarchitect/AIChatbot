@@ -2,25 +2,71 @@
 
 import { useParams } from "next/navigation";
 import { useState, useEffect } from "react";
-import { Users, HardDrive, Zap, Activity } from "lucide-react";
+import { Users, HardDrive, Zap, Activity, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AnimatedKpiCard, PlanBadge, TableSkeleton } from "@/components/shared";
-import { tenants, auditLogs } from "@/lib/mock/data";
+import type { AuditLog, Tenant } from "@/lib/mock/data";
+import { useSessionStore } from "@/lib/store";
 import { motion } from "framer-motion";
 
 export default function TenantOverviewPage() {
   const params = useParams();
-  const tenant = tenants.find((t) => t.id === params.tenantId);
+  const tenantId = params.tenantId as string;
+  const accessToken = useSessionStore((s) => s.accessToken);
+  const [tenant, setTenant] = useState<Tenant | null>(null);
+  const [tenantLogs, setTenantLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 500);
-    return () => clearTimeout(timer);
-  }, []);
+    const useApi = process.env.NEXT_PUBLIC_USE_API_AUTH === "true";
 
-  if (!tenant) return null;
+    async function load() {
+      if (!useApi || !accessToken) {
+        setLoading(false);
+        return;
+      }
+      try {
+        const [tenantRes, logsRes] = await Promise.all([
+          fetch(`/api/v1/tenants/${tenantId}`, {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "x-tenant-id": tenantId,
+            },
+          }),
+          fetch(`/api/v1/tenants/${tenantId}/audit-logs`, {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "x-tenant-id": tenantId,
+            },
+          }),
+        ]);
+        const tenantJson = await tenantRes.json().catch(() => ({}));
+        const logsJson = await logsRes.json().catch(() => ({}));
+        if (tenantRes.ok) {
+          setTenant(tenantJson.data ?? null);
+        }
+        if (logsRes.ok) {
+          setTenantLogs(logsJson.data ?? []);
+        }
+      } finally {
+        setLoading(false);
+      }
+    }
 
-  const tenantLogs = auditLogs.filter((l) => l.tenantId === tenant.id);
+    void load();
+  }, [accessToken, tenantId]);
+
+  if (loading && !tenant) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!tenant) {
+    return <p className="py-12 text-sm text-muted-foreground">Tenant data is unavailable.</p>;
+  }
 
   return (
     <div className="space-y-6">

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useParams } from "next/navigation";
 import { Search, ToggleLeft, ToggleRight } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -19,9 +20,47 @@ const groupLabels: Record<string, string> = {
 
 export default function FeatureFlagsPage() {
   const hasPermission = useSessionStore((s) => s.hasPermission);
+  const accessToken = useSessionStore((s) => s.accessToken);
+  const setTenantFeatureFlags = useSessionStore((s) => s.setTenantFeatureFlags);
+  const params = useParams();
+  const tenantId = params.tenantId as string;
   const [flags, setFlags] = useState<FeatureFlag[]>(featureFlags);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const canManageFeatureFlags = hasPermission("manage_feature_flags");
+  const canViewFeatureFlags = hasPermission("view_feature_flags");
+
+  useEffect(() => {
+    const useApi = process.env.NEXT_PUBLIC_USE_API_AUTH === "true";
+    async function loadFlags() {
+      if (!useApi || !accessToken) {
+        setLoading(false);
+        return;
+      }
+      try {
+        const response = await fetch(`/api/v1/tenants/${tenantId}/feature-flags`, {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "x-tenant-id": tenantId,
+          },
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(result?.error ?? "Failed to load feature flags");
+        }
+        setFlags(result.data ?? []);
+        setTenantFeatureFlags(tenantId, result.data ?? []);
+        setLastSavedAt(new Date());
+      } catch (error) {
+        console.error(error);
+        toast.error("Failed to load feature flags.");
+      } finally {
+        setLoading(false);
+      }
+    }
+    void loadFlags();
+  }, [accessToken, setTenantFeatureFlags, tenantId]);
 
   const filtered = useMemo(() => {
     if (!search) return flags;
@@ -39,22 +78,87 @@ export default function FeatureFlagsPage() {
       toast.error("Insufficient permissions");
       return;
     }
-    setFlags((prev) =>
-      prev.map((f) => (f.id === id ? { ...f, enabled: !f.enabled } : f))
-    );
     const flag = flags.find((f) => f.id === id);
-    toast.success(
-      `${flag?.name} ${flag?.enabled ? "disabled" : "enabled"}`
-    );
+    if (!flag) return;
+    const useApi = process.env.NEXT_PUBLIC_USE_API_AUTH === "true";
+    if (!useApi || !accessToken) {
+      setFlags((prev) => prev.map((f) => (f.id === id ? { ...f, enabled: !f.enabled } : f)));
+      setLastSavedAt(new Date());
+      toast.success(`${flag.name} ${flag.enabled ? "disabled" : "enabled"}`);
+      return;
+    }
+    void (async () => {
+      try {
+        const response = await fetch(`/api/v1/tenants/${tenantId}/feature-flags`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+            "x-tenant-id": tenantId,
+          },
+          body: JSON.stringify({ key: flag.key, enabled: !flag.enabled }),
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(result?.error ?? "Failed to update flag");
+        }
+        setFlags(result.data ?? []);
+        setTenantFeatureFlags(tenantId, result.data ?? []);
+        setLastSavedAt(new Date());
+        toast.success(`${flag.name} ${flag.enabled ? "disabled" : "enabled"}`);
+      } catch (error) {
+        console.error(error);
+        toast.error(error instanceof Error ? error.message : "Failed to update flag.");
+      }
+    })();
   };
 
-  const bulkToggle = (enable: boolean) => {
+  const bulkToggle = async (enable: boolean) => {
     if (!canManageFeatureFlags) {
       toast.error("Insufficient permissions");
       return;
     }
-    setFlags((prev) => prev.map((f) => ({ ...f, enabled: enable })));
-    toast.success(`All flags ${enable ? "enabled" : "disabled"}`);
+    const useApi = process.env.NEXT_PUBLIC_USE_API_AUTH === "true";
+    if (!useApi || !accessToken) {
+      setFlags((prev) => prev.map((f) => ({ ...f, enabled: enable })));
+      setLastSavedAt(new Date());
+      toast.success(`All flags ${enable ? "enabled" : "disabled"}`);
+      return;
+    }
+    try {
+      for (const flag of flags) {
+        if (flag.enabled === enable) continue;
+        const response = await fetch(`/api/v1/tenants/${tenantId}/feature-flags`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+            "x-tenant-id": tenantId,
+          },
+          body: JSON.stringify({ key: flag.key, enabled: enable }),
+        });
+        if (!response.ok) {
+          const result = await response.json().catch(() => ({}));
+          throw new Error(result?.error ?? "Failed to bulk update flags");
+        }
+      }
+      const refreshed = await fetch(`/api/v1/tenants/${tenantId}/feature-flags`, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "x-tenant-id": tenantId,
+        },
+      });
+      const refreshedJson = await refreshed.json().catch(() => ({}));
+      if (refreshed.ok) {
+        setFlags(refreshedJson.data ?? []);
+        setTenantFeatureFlags(tenantId, refreshedJson.data ?? []);
+        setLastSavedAt(new Date());
+      }
+      toast.success(`All flags ${enable ? "enabled" : "disabled"}`);
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : "Failed to bulk update flags.");
+    }
   };
 
   return (
@@ -66,6 +170,11 @@ export default function FeatureFlagsPage() {
           <p className="text-sm text-muted-foreground">
             Toggle features on or off for this tenant.
           </p>
+          {lastSavedAt ? (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Last saved: {lastSavedAt.toLocaleString()}
+            </p>
+          ) : null}
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => bulkToggle(true)} className="gap-2" disabled={!canManageFeatureFlags}>
@@ -91,6 +200,12 @@ export default function FeatureFlagsPage() {
       </div>
 
       {/* Grouped Flags */}
+      {loading ? (
+        <p className="text-sm text-muted-foreground">Loading feature flags...</p>
+      ) : !canViewFeatureFlags ? (
+        <p className="text-sm text-muted-foreground">Insufficient permissions to view feature flags.</p>
+      ) : (
+        <>
       {groups.map((group) => (
         <Card key={group} className="border-border">
           <CardHeader className="pb-3">
@@ -113,6 +228,8 @@ export default function FeatureFlagsPage() {
           </CardContent>
         </Card>
       ))}
+        </>
+      )}
     </div>
   );
 }

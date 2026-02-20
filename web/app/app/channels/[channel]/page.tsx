@@ -12,6 +12,7 @@ const channelMeta: Record<string, { name: string; feature: string }> = {
   webchat: { name: "WebChat", feature: "webchat_widget" },
   sms: { name: "SMS", feature: "sms_channel" },
   email: { name: "Email", feature: "email_channel" },
+  voice: { name: "Voice", feature: "voice_channel" },
 };
 
 export default function ChannelPlaceholderPage() {
@@ -52,7 +53,7 @@ export default function ChannelPlaceholderPage() {
               <div className="rounded-lg border border-border bg-muted/30 p-4">
                 <p className="flex items-center gap-2 text-sm font-medium text-foreground">
                   <Lock className="h-4 w-4 text-muted-foreground" />
-                  Locked for current plan
+                  Locked for current tenant settings
                 </p>
                 <p className="mt-2 text-sm text-muted-foreground">
                   Upgrade the tenant plan or enable the related feature flag to access this channel.

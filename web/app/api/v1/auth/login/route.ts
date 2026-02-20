@@ -1,14 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { createRefreshSession, findUserByEmail, validatePassword } from "@/lib/server/state";
+import { verifySync } from "otplib";
+import { createRefreshSession, findUserByEmail, getUserMfa, recordAuthEvent, validatePassword } from "@/lib/server/state";
 import { signAccessToken, signRefreshToken } from "@/lib/server/jwt";
 
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(6),
+  mfaCode: z.string().optional(),
 });
 
 export async function POST(req: NextRequest) {
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "0.0.0.0";
   const body = await req.json().catch(() => null);
   const parsed = loginSchema.safeParse(body);
   if (!parsed.success) {
@@ -18,7 +21,32 @@ export async function POST(req: NextRequest) {
   const user = await findUserByEmail(parsed.data.email);
   const isValidPassword = user ? await validatePassword(parsed.data.password, user.passwordHash) : false;
   if (!user || !user.active || !isValidPassword) {
+    await recordAuthEvent({
+      userId: user?.id ?? null,
+      email: parsed.data.email,
+      action: "auth.login",
+      success: false,
+      ip,
+      details: { reason: "invalid_credentials" },
+    });
     return NextResponse.json({ error: "Invalid credentials." }, { status: 401 });
+  }
+
+  const userMfa = await getUserMfa(user.id);
+  if (userMfa?.enabled) {
+    const code = parsed.data.mfaCode;
+    const verified = code ? verifySync({ secret: userMfa.secret, token: code }) : { valid: false };
+    if (!code || !verified.valid) {
+      await recordAuthEvent({
+        userId: user.id,
+        email: user.email,
+        action: "auth.login",
+        success: false,
+        ip,
+        details: { reason: "mfa_required_or_invalid" },
+      });
+      return NextResponse.json({ error: "MFA required or invalid code." }, { status: 401 });
+    }
   }
 
   const refreshSession = await createRefreshSession(
@@ -34,6 +62,15 @@ export async function POST(req: NextRequest) {
   const refreshToken = await signRefreshToken({
     sub: user.id,
     sessionId: refreshSession.id,
+  });
+
+  await recordAuthEvent({
+    userId: user.id,
+    email: user.email,
+    action: "auth.login",
+    success: true,
+    ip,
+    details: { method: "password", mfa: !!userMfa?.enabled },
   });
 
   return NextResponse.json({

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { Role } from "@/lib/mock/data";
 import { hasPermission } from "@/lib/server/rbac";
-import { findUserById } from "@/lib/server/state";
+import { findUserById, getTenantRolePermissions } from "@/lib/server/state";
 import { verifyAccessToken } from "@/lib/server/jwt";
 
 export interface AuthContext {
@@ -42,7 +42,20 @@ export async function requireAuth(req: NextRequest): Promise<AuthContext | NextR
   }
 }
 
-export function requirePermission(auth: AuthContext, permission: string): NextResponse | null {
+export async function requirePermission(
+  auth: AuthContext,
+  permission: string,
+  tenantId?: string
+): Promise<NextResponse | null> {
+  if (tenantId) {
+    const matrix = await getTenantRolePermissions(tenantId, { role: auth.role, tenantId });
+    const rolePermissions = matrix[auth.role] ?? [];
+    if (!rolePermissions.includes(permission)) {
+      return NextResponse.json({ error: "Insufficient permissions." }, { status: 403 });
+    }
+    return null;
+  }
+
   if (!hasPermission(auth.role, permission)) {
     return NextResponse.json({ error: "Insufficient permissions." }, { status: 403 });
   }

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { addAuditLog, addTenant, listTenants } from "@/lib/server/state";
+import { addAuditLog, addTenant, findTenantById, listTenants } from "@/lib/server/state";
 import { requireAuth, requirePermission } from "@/lib/server/auth";
 
 const createTenantSchema = z.object({
@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
   const auth = await requireAuth(req);
   if (auth instanceof NextResponse) return auth;
 
-  const permissionError = requirePermission(auth, "view_tenants");
+  const permissionError = await requirePermission(auth, "view_tenants");
   if (permissionError) return permissionError;
 
   const { searchParams } = new URL(req.url);
@@ -26,11 +26,13 @@ export async function GET(req: NextRequest) {
   const page = Number(searchParams.get("page") ?? "1");
   const perPage = Number(searchParams.get("perPage") ?? "10");
 
-  let result = await listTenants();
-
-  if (auth.role !== "admin") {
-    result = result.filter((t) => auth.tenantIds.includes(t.id));
-  }
+  let result = auth.role === "admin"
+    ? await listTenants({ role: auth.role })
+    : (
+        await Promise.all(
+          auth.tenantIds.map((tenantId) => findTenantById(tenantId, { role: auth.role, tenantId }))
+        )
+      ).filter((tenant): tenant is NonNullable<typeof tenant> => Boolean(tenant));
   if (search) {
     result = result.filter(
       (t) => t.name.toLowerCase().includes(search) || t.domain.toLowerCase().includes(search)
@@ -61,7 +63,7 @@ export async function POST(req: NextRequest) {
   const auth = await requireAuth(req);
   if (auth instanceof NextResponse) return auth;
 
-  const permissionError = requirePermission(auth, "manage_tenants");
+  const permissionError = await requirePermission(auth, "manage_tenants");
   if (permissionError) return permissionError;
 
   const body = await req.json().catch(() => null);
@@ -70,15 +72,30 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid tenant payload.", details: parsed.error.flatten() }, { status: 400 });
   }
 
-  const tenant = await addTenant(parsed.data);
-  await addAuditLog({
-    tenantId: tenant.id,
-    actor: auth.name,
-    actorEmail: auth.email,
-    action: "tenant.created",
-    target: tenant.name,
-    details: { plan: tenant.plan, domain: tenant.domain },
-  });
+  try {
+    const tenant = await addTenant(parsed.data, { role: auth.role });
+    await addAuditLog({
+      tenantId: tenant.id,
+      actor: auth.name,
+      actorEmail: auth.email,
+      action: "tenant.created",
+      target: tenant.name,
+      details: { plan: tenant.plan, domain: tenant.domain },
+    }, { role: auth.role });
 
-  return NextResponse.json({ data: tenant }, { status: 201 });
+    return NextResponse.json({ data: tenant }, { status: 201 });
+  } catch (error: unknown) {
+    const code = (error as { code?: string })?.code;
+    if (code === "23505") {
+      return NextResponse.json(
+        { error: "Tenant domain already exists. Please use a different domain." },
+        { status: 409 }
+      );
+    }
+
+    return NextResponse.json(
+      { error: "Failed to create tenant. Please try again." },
+      { status: 500 }
+    );
+  }
 }
