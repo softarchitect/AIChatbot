@@ -54,12 +54,18 @@ export default function TenantDetailLayout({ children }: { children: React.React
   const tenantId = params.tenantId as string;
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [loadingTenant, setLoadingTenant] = useState(true);
+  const [tenantError, setTenantError] = useState<string | null>(null);
 
   useEffect(() => {
     const useApi = process.env.NEXT_PUBLIC_USE_API_AUTH === "true";
 
     async function loadTenant() {
-      if (!useApi || !accessToken) {
+      if (!useApi) {
+        setLoadingTenant(false);
+        return;
+      }
+      if (!accessToken) {
+        setTenantError("Session expired. Please sign in again.");
         setLoadingTenant(false);
         return;
       }
@@ -75,8 +81,10 @@ export default function TenantDetailLayout({ children }: { children: React.React
           throw new Error(result?.error ?? "Failed to load tenant");
         }
         setTenant(result.data ?? null);
+        setTenantError(null);
       } catch {
         setTenant(null);
+        setTenantError("Failed to load tenant.");
       } finally {
         setLoadingTenant(false);
       }
@@ -96,7 +104,7 @@ export default function TenantDetailLayout({ children }: { children: React.React
   if (!tenant) {
     return (
       <div className="flex items-center justify-center py-20">
-        <p className="text-muted-foreground">Tenant not found</p>
+        <p className="text-muted-foreground">{tenantError ?? "Tenant not found"}</p>
       </div>
     );
   }

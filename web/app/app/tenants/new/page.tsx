@@ -58,7 +58,10 @@ export default function CreateTenantPage() {
     setSubmitting(true);
     const useApi = process.env.NEXT_PUBLIC_USE_API_AUTH === "true";
     try {
-      if (useApi && accessToken) {
+      if (useApi) {
+        if (!accessToken) {
+          throw new Error("Session expired. Please sign in again.");
+        }
         const response = await fetch("/api/v1/tenants", {
           method: "POST",
           headers: {

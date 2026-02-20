@@ -28,7 +28,12 @@ export default function RolesPermissionsPage() {
   useEffect(() => {
     const useApi = process.env.NEXT_PUBLIC_USE_API_AUTH === "true";
     async function loadMatrix() {
-      if (!useApi || !accessToken) {
+      if (!useApi) {
+        setLoading(false);
+        return;
+      }
+      if (!accessToken) {
+        toast.error("Session expired. Please sign in again.");
         setLoading(false);
         return;
       }
@@ -68,9 +73,13 @@ export default function RolesPermissionsPage() {
 
   const handleSave = async () => {
     const useApi = process.env.NEXT_PUBLIC_USE_API_AUTH === "true";
-    if (!useApi || !accessToken) {
+    if (!useApi) {
       toast.success("Permissions saved successfully.");
       setHasChanges(false);
+      return;
+    }
+    if (!accessToken) {
+      toast.error("Session expired. Please sign in again.");
       return;
     }
     try {

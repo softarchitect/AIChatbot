@@ -34,7 +34,12 @@ export default function FeatureFlagsPage() {
   useEffect(() => {
     const useApi = process.env.NEXT_PUBLIC_USE_API_AUTH === "true";
     async function loadFlags() {
-      if (!useApi || !accessToken) {
+      if (!useApi) {
+        setLoading(false);
+        return;
+      }
+      if (!accessToken) {
+        toast.error("Session expired. Please sign in again.");
         setLoading(false);
         return;
       }
@@ -81,10 +86,14 @@ export default function FeatureFlagsPage() {
     const flag = flags.find((f) => f.id === id);
     if (!flag) return;
     const useApi = process.env.NEXT_PUBLIC_USE_API_AUTH === "true";
-    if (!useApi || !accessToken) {
+    if (!useApi) {
       setFlags((prev) => prev.map((f) => (f.id === id ? { ...f, enabled: !f.enabled } : f)));
       setLastSavedAt(new Date());
       toast.success(`${flag.name} ${flag.enabled ? "disabled" : "enabled"}`);
+      return;
+    }
+    if (!accessToken) {
+      toast.error("Session expired. Please sign in again.");
       return;
     }
     void (async () => {
@@ -119,10 +128,14 @@ export default function FeatureFlagsPage() {
       return;
     }
     const useApi = process.env.NEXT_PUBLIC_USE_API_AUTH === "true";
-    if (!useApi || !accessToken) {
+    if (!useApi) {
       setFlags((prev) => prev.map((f) => ({ ...f, enabled: enable })));
       setLastSavedAt(new Date());
       toast.success(`All flags ${enable ? "enabled" : "disabled"}`);
+      return;
+    }
+    if (!accessToken) {
+      toast.error("Session expired. Please sign in again.");
       return;
     }
     try {

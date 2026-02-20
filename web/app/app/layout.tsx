@@ -8,8 +8,10 @@ import { useSessionStore } from "@/lib/store";
 
 export default function AppShellLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const { isAuthenticated, sidebarCollapsed, dir } = useSessionStore();
+  const { isAuthenticated, accessToken, sidebarCollapsed, dir, logout } = useSessionStore();
   const [hydrated, setHydrated] = useState(false);
+  const useApi = process.env.NEXT_PUBLIC_USE_API_AUTH === "true";
+  const hasValidSession = isAuthenticated && (!useApi || !!accessToken);
 
   // Wait for zustand persist to rehydrate from localStorage
   useEffect(() => {
@@ -24,17 +26,24 @@ export default function AppShellLayout({ children }: { children: React.ReactNode
   }, []);
 
   useEffect(() => {
-    if (hydrated && !isAuthenticated) {
+    if (!hydrated) return;
+    if (!isAuthenticated) {
+      router.replace("/auth/login");
+      return;
+    }
+    if (useApi && !accessToken) {
+      // Clear stale persisted mock session and force fresh API login.
+      logout();
       router.replace("/auth/login");
     }
-  }, [isAuthenticated, hydrated, router]);
+  }, [accessToken, hydrated, isAuthenticated, logout, router, useApi]);
 
   useEffect(() => {
     document.documentElement.dir = dir;
     document.documentElement.lang = dir === "rtl" ? "ar" : "en";
   }, [dir]);
 
-  if (!hydrated || !isAuthenticated) {
+  if (!hydrated || !hasValidSession) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />

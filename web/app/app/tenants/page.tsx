@@ -70,9 +70,15 @@ export default function TenantsPage() {
     const useApi = process.env.NEXT_PUBLIC_USE_API_AUTH === "true";
 
     async function loadTenants() {
-      if (!useApi || !accessToken) {
+      if (!useApi) {
         setTenantRows(mockTenants);
         setLoading(false);
+        return;
+      }
+      if (!accessToken) {
+        setTenantRows([]);
+        setLoading(false);
+        toast.error("Session expired. Please sign in again.");
         return;
       }
       try {
@@ -123,7 +129,11 @@ export default function TenantsPage() {
     if (deleteTarget) {
       const useApi = process.env.NEXT_PUBLIC_USE_API_AUTH === "true";
       try {
-        if (useApi && accessToken) {
+        if (useApi) {
+          if (!accessToken) {
+            toast.error("Session expired. Please sign in again.");
+            return;
+          }
           const response = await fetch(`/api/v1/tenants/${deleteTarget.id}`, {
             method: "DELETE",
             headers: {
