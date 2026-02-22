@@ -33,7 +33,7 @@ import { toast } from "sonner";
 const tabs = [
   { label: "Overview", href: "overview", icon: LayoutDashboard },
   { label: "Edit", href: "edit", icon: Pencil },
-  { label: "Users", href: "users", icon: Users },
+  { label: "Agents", href: "users", icon: Users },
   { label: "Roles & Permissions", href: "roles-permissions", icon: Shield },
   { label: "Feature Flags", href: "feature-flags", icon: Flag },
   { label: "White-Label", href: "white-label", icon: Palette },
@@ -43,7 +43,6 @@ const tabs = [
   { label: "Conversations", href: "conversations", icon: MessageSquare },
   { label: "Campaigns", href: "campaigns", icon: Megaphone },
   { label: "Billing", href: "billing", icon: Receipt },
-  { label: "Agents", href: "agents", icon: UserCog },
 ];
 
 export default function TenantDetailLayout({ children }: { children: React.ReactNode }) {

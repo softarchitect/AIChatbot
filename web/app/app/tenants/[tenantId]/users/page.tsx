@@ -169,13 +169,50 @@ export default function TenantUsersPage() {
     }
   };
 
+  const updateUser = async (userId: string, values: { role?: Role; active?: boolean }) => {
+    const useApi = process.env.NEXT_PUBLIC_USE_API_AUTH === "true";
+    try {
+      if (useApi) {
+        if (!accessToken) {
+          throw new Error("Session expired. Please sign in again.");
+        }
+        const response = await fetch(`/api/v1/tenants/${tenantId}/users/${userId}`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+            "x-tenant-id": tenantId,
+          },
+          body: JSON.stringify(values),
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(result?.error ?? "Failed to update user.");
+        }
+        const refreshed = await fetch(`/api/v1/tenants/${tenantId}/users`, {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "x-tenant-id": tenantId,
+          },
+        });
+        const refreshedJson = await refreshed.json().catch(() => ({}));
+        if (refreshed.ok && Array.isArray(refreshedJson?.data)) {
+          setUsers(refreshedJson.data);
+        }
+      }
+      toast.success("Agent updated successfully.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to update user.");
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-foreground">Users</h2>
-          <p className="text-sm text-muted-foreground">{users.length} users in this tenant</p>
+          <h2 className="text-lg font-semibold text-foreground">Agents</h2>
+          <p className="text-sm text-muted-foreground">{users.length} members in this tenant</p>
         </div>
         <Button onClick={() => setInviteOpen(true)} className="gap-2" disabled={!canEditUsers}>
           <UserPlus className="h-4 w-4" />
@@ -200,8 +237,8 @@ export default function TenantUsersPage() {
       ) : filteredUsers.length === 0 ? (
         <EmptyState
           icon={UserPlus}
-          title="No users found"
-          description="Invite team members to start collaborating."
+          title="No agents found"
+          description="Create agents to start handling conversations."
           action={
             <Button onClick={() => setInviteOpen(true)} className="gap-2" disabled={!canEditUsers}>
               <UserPlus className="h-4 w-4" />
@@ -268,14 +305,14 @@ export default function TenantUsersPage() {
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem
                           disabled={!canEditUsers}
-                          onClick={() => toast.success(`Role changed for ${user.name}`)}
+                          onClick={() => void updateUser(user.id, { role: "supervisor" })}
                         >
                           <Shield className="mr-2 h-4 w-4" />
-                          Change Role
+                          Promote to Supervisor
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           disabled={!canEditUsers}
-                          onClick={() => toast.success(`Password reset for ${user.name}`)}
+                          onClick={() => void updateUser(user.id, { password: "password123" })}
                         >
                           <KeyRound className="mr-2 h-4 w-4" />
                           Reset Password
@@ -283,7 +320,7 @@ export default function TenantUsersPage() {
                         <DropdownMenuItem
                           className="text-destructive focus:text-destructive"
                           disabled={!canEditUsers}
-                          onClick={() => toast.success(`${user.name} deactivated`)}
+                          onClick={() => void updateUser(user.id, { active: false })}
                         >
                           <Ban className="mr-2 h-4 w-4" />
                           Deactivate

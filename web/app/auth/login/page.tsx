@@ -22,14 +22,18 @@ type LoginForm = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login, oauthLogin, isLoading } = useSessionStore();
+  const { login, oauthLogin, isLoading, authError, clearAuthError } = useSessionStore();
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState("");
+  const [localError, setLocalError] = useState("");
+  const [resending, setResending] = useState(false);
+  const [resendMessage, setResendMessage] = useState("");
+  const [resendVerifyUrl, setResendVerifyUrl] = useState("");
   const [oauthLoading, setOauthLoading] = useState<"google" | "microsoft" | null>(null);
 
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors },
   } = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
@@ -40,12 +44,13 @@ export default function LoginPage() {
   });
 
   const onSubmit = async (data: LoginForm) => {
-    setError("");
+    setLocalError("");
+    setResendMessage("");
+    setResendVerifyUrl("");
+    clearAuthError();
     const success = await login(data.email, data.password);
     if (success) {
       router.push("/app/dashboard");
-    } else {
-      setError("Invalid credentials. Please try again.");
     }
   };
 
@@ -103,26 +108,32 @@ export default function LoginPage() {
   };
 
   const onGoogleOAuth = async () => {
-    setError("");
+    setLocalError("");
+    setResendMessage("");
+    setResendVerifyUrl("");
+    clearAuthError();
     setOauthLoading("google");
     try {
       const idToken = await getGoogleIdToken();
       const success = await oauthLogin("google", idToken);
       if (!success) {
-        setError("Google sign-in failed. Ensure your email is onboarded in this system.");
+        setLocalError("Google sign-in failed. Ensure your email is onboarded in this system.");
         return;
       }
       router.push("/app/dashboard");
     } catch (oauthError) {
       const message = oauthError instanceof Error ? oauthError.message : "Google sign-in failed.";
-      setError(message);
+      setLocalError(message);
     } finally {
       setOauthLoading(null);
     }
   };
 
   const onMicrosoftOAuth = async () => {
-    setError("");
+    setLocalError("");
+    setResendMessage("");
+    setResendVerifyUrl("");
+    clearAuthError();
     setOauthLoading("microsoft");
     try {
       const clientId = process.env.NEXT_PUBLIC_MICROSOFT_CLIENT_ID;
@@ -146,16 +157,44 @@ export default function LoginPage() {
       }
       const success = await oauthLogin("microsoft", result.idToken);
       if (!success) {
-        setError("Microsoft sign-in failed. Ensure your email is onboarded in this system.");
+        setLocalError("Microsoft sign-in failed. Ensure your email is onboarded in this system.");
         return;
       }
       router.push("/app/dashboard");
     } catch (oauthError) {
       const message =
         oauthError instanceof Error ? oauthError.message : "Microsoft sign-in failed.";
-      setError(message);
+      setLocalError(message);
     } finally {
       setOauthLoading(null);
+    }
+  };
+
+  const error = authError ?? localError;
+  const emailValue = watch("email");
+  const canResendVerification = error.toLowerCase().includes("email is not verified");
+
+  const onResendVerification = async () => {
+    if (!emailValue) return;
+    setResending(true);
+    setResendMessage("");
+    setResendVerifyUrl("");
+    try {
+      const response = await fetch("/api/v1/auth/verify-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: emailValue }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(result?.error ?? "Failed to resend verification.");
+      }
+      setResendVerifyUrl(result?.verifyUrl ?? "");
+      setResendMessage("Verification link generated.");
+    } catch (e) {
+      setResendMessage(e instanceof Error ? e.message : "Failed to resend verification.");
+    } finally {
+      setResending(false);
     }
   };
 
@@ -358,6 +397,37 @@ export default function LoginPage() {
                 className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive"
               >
                 {error}
+                {canResendVerification ? (
+                  <div className="mt-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={onResendVerification}
+                      disabled={resending || !emailValue}
+                    >
+                      {resending ? "Resending..." : "Resend Verification Link"}
+                    </Button>
+                  </div>
+                ) : null}
+                {resendMessage ? (
+                  <p className="mt-2 text-xs text-foreground">
+                    {resendMessage}
+                    {resendVerifyUrl ? (
+                      <>
+                        {" "}
+                        <a
+                          href={resendVerifyUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-primary underline"
+                        >
+                          Open verification link
+                        </a>
+                      </>
+                    ) : null}
+                  </p>
+                ) : null}
               </motion.div>
             )}
 

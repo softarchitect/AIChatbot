@@ -1,14 +1,15 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { useSessionStore } from "@/lib/store";
 
 export default function AppShellLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const { isAuthenticated, accessToken, sidebarCollapsed, dir, logout } = useSessionStore();
+  const pathname = usePathname();
+  const { isAuthenticated, accessToken, sidebarCollapsed, dir, currentUser, logout } = useSessionStore();
   const [hydrated, setHydrated] = useState(false);
   const useApi = process.env.NEXT_PUBLIC_USE_API_AUTH === "true";
   const hasValidSession = isAuthenticated && (!useApi || !!accessToken);
@@ -37,6 +38,16 @@ export default function AppShellLayout({ children }: { children: React.ReactNode
       router.replace("/auth/login");
     }
   }, [accessToken, hydrated, isAuthenticated, logout, router, useApi]);
+
+  useEffect(() => {
+    if (!hydrated || !currentUser) return;
+    if (currentUser.role === "agent") {
+      const allowed = pathname.startsWith("/app/agent/") || pathname === "/app/profile" || pathname.startsWith("/app/channels");
+      if (!allowed) {
+        router.replace("/app/agent/dashboard");
+      }
+    }
+  }, [currentUser, hydrated, pathname, router]);
 
   useEffect(() => {
     document.documentElement.dir = dir;

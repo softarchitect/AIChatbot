@@ -15,6 +15,14 @@ export default function TenantOverviewPage() {
   const accessToken = useSessionStore((s) => s.accessToken);
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [tenantLogs, setTenantLogs] = useState<AuditLog[]>([]);
+  const [subscription, setSubscription] = useState<{
+    planName: string;
+    status: string;
+    trialDays: number;
+    agentLimit: number;
+    activeAgents: number;
+    remainingAgents: number;
+  } | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -26,7 +34,7 @@ export default function TenantOverviewPage() {
         return;
       }
       try {
-        const [tenantRes, logsRes] = await Promise.all([
+        const [tenantRes, logsRes, subRes] = await Promise.all([
           fetch(`/api/v1/tenants/${tenantId}`, {
             headers: {
               Authorization: `Bearer ${accessToken}`,
@@ -39,14 +47,24 @@ export default function TenantOverviewPage() {
               "x-tenant-id": tenantId,
             },
           }),
+          fetch(`/api/v1/tenants/${tenantId}/subscription`, {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "x-tenant-id": tenantId,
+            },
+          }),
         ]);
         const tenantJson = await tenantRes.json().catch(() => ({}));
         const logsJson = await logsRes.json().catch(() => ({}));
+        const subJson = await subRes.json().catch(() => ({}));
         if (tenantRes.ok) {
           setTenant(tenantJson.data ?? null);
         }
         if (logsRes.ok) {
           setTenantLogs(logsJson.data ?? []);
+        }
+        if (subRes.ok) {
+          setSubscription(subJson.data ?? null);
         }
       } finally {
         setLoading(false);
@@ -119,6 +137,24 @@ export default function TenantOverviewPage() {
               <span className="text-sm text-muted-foreground">Current Plan</span>
               <PlanBadge plan={tenant.plan} />
             </div>
+            {subscription ? (
+              <>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Plan Status</span>
+                  <span className="text-sm font-medium text-foreground capitalize">{subscription.status}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Trial Duration</span>
+                  <span className="text-sm font-medium text-foreground">{subscription.trialDays} days</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Agent Usage</span>
+                  <span className="text-sm font-medium text-foreground">
+                    {subscription.activeAgents}/{subscription.agentLimit}
+                  </span>
+                </div>
+              </>
+            ) : null}
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">Domain</span>
               <span className="text-sm font-medium text-foreground">{tenant.domain}</span>

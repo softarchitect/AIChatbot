@@ -10,6 +10,7 @@ export async function GET(req: NextRequest) {
     name: auth.name,
     email: auth.email,
     role: auth.role,
+    isPlatformSubAdmin: auth.isPlatformSubAdmin,
     tenantIds: auth.tenantIds,
   });
 }

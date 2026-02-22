@@ -69,7 +69,8 @@ export default function TenantsPage() {
   useEffect(() => {
     const platformOwnerEmail = (process.env.NEXT_PUBLIC_PLATFORM_OWNER_EMAIL ?? "owner@saasphere.io").toLowerCase();
     const isPlatformOwner = currentUser?.email?.toLowerCase() === platformOwnerEmail;
-    if (currentUser && !isPlatformOwner && currentTenant?.id) {
+    const isPlatformOperator = isPlatformOwner || Boolean(currentUser?.isPlatformSubAdmin);
+    if (currentUser && !isPlatformOperator && currentTenant?.id) {
       router.replace(`/app/tenants/${currentTenant.id}/overview`);
       return;
     }

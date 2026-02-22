@@ -7,6 +7,7 @@ import { verifyAccessToken } from "@/lib/server/jwt";
 export interface AuthContext {
   userId: string;
   role: Role;
+  isPlatformSubAdmin: boolean;
   tenantIds: string[];
   name: string;
   email: string;
@@ -33,6 +34,7 @@ export async function requireAuth(req: NextRequest): Promise<AuthContext | NextR
     return {
       userId: user.id,
       role: user.role,
+      isPlatformSubAdmin: Boolean(user.isPlatformSubAdmin),
       tenantIds: user.tenantIds,
       name: user.name,
       email: user.email,

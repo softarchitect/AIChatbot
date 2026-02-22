@@ -63,6 +63,20 @@ export async function POST(req: NextRequest) {
       });
       return NextResponse.json({ error: "User is not onboarded for this tenant." }, { status: 401 });
     }
+    if (user.emailVerified === false) {
+      await recordAuthEvent({
+        userId: user.id,
+        email: user.email,
+        action: "auth.oauth_login",
+        success: false,
+        ip,
+        details: { provider, reason: "email_not_verified" },
+      });
+      return NextResponse.json(
+        { error: "Email is not verified. Please verify your email before login." },
+        { status: 403 }
+      );
+    }
 
     const refreshSession = await createRefreshSession(user.id, Date.now() + 7 * 24 * 60 * 60 * 1000);
     const accessToken = await signAccessToken({
@@ -90,6 +104,7 @@ export async function POST(req: NextRequest) {
         name: user.name,
         email: user.email,
         role: user.role,
+        isPlatformSubAdmin: Boolean(user.isPlatformSubAdmin),
         tenantIds: user.tenantIds,
       },
       accessToken,

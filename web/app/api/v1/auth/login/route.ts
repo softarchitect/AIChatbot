@@ -31,6 +31,20 @@ export async function POST(req: NextRequest) {
     });
     return NextResponse.json({ error: "Invalid credentials." }, { status: 401 });
   }
+  if (user.emailVerified === false) {
+    await recordAuthEvent({
+      userId: user.id,
+      email: user.email,
+      action: "auth.login",
+      success: false,
+      ip,
+      details: { reason: "email_not_verified" },
+    });
+    return NextResponse.json(
+      { error: "Email is not verified. Please verify your email before login." },
+      { status: 403 }
+    );
+  }
 
   const userMfa = await getUserMfa(user.id);
   if (userMfa?.enabled) {
@@ -79,6 +93,7 @@ export async function POST(req: NextRequest) {
       name: user.name,
       email: user.email,
       role: user.role,
+      isPlatformSubAdmin: Boolean(user.isPlatformSubAdmin),
       tenantIds: user.tenantIds,
     },
     accessToken,

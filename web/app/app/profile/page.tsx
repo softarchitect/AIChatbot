@@ -22,15 +22,67 @@ import { toast } from "sonner";
 
 export default function ProfilePage() {
   const { theme, setTheme } = useTheme();
-  const { currentUser, locale, setLocale } = useSessionStore();
+  const { currentUser, accessToken, locale, setLocale } = useSessionStore();
   const [name, setName] = useState(currentUser?.name ?? "");
   const [email, setEmail] = useState(currentUser?.email ?? "");
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const initials = currentUser?.name
     ?.split(" ")
     .map((n) => n[0])
     .join("")
     .toUpperCase() ?? "U";
+
+  const saveProfile = async () => {
+    const useApi = process.env.NEXT_PUBLIC_USE_API_AUTH === "true";
+    if (!useApi) {
+      toast.success("Profile updated successfully.");
+      return;
+    }
+    if (!accessToken) {
+      toast.error("Session expired. Please sign in again.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const profileResponse = await fetch("/api/v1/auth/profile", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ name, email }),
+      });
+      const profileResult = await profileResponse.json().catch(() => ({}));
+      if (!profileResponse.ok) {
+        throw new Error(profileResult?.error ?? "Failed to update profile.");
+      }
+
+      if (newPassword) {
+        const passResponse = await fetch("/api/v1/auth/change-password", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({ currentPassword, newPassword }),
+        });
+        const passResult = await passResponse.json().catch(() => ({}));
+        if (!passResponse.ok) {
+          throw new Error(passResult?.error ?? "Failed to change password.");
+        }
+        setCurrentPassword("");
+        setNewPassword("");
+      }
+      toast.success("Profile updated successfully.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to update profile.");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <PageTransition>
@@ -137,13 +189,41 @@ export default function ProfilePage() {
           </CardContent>
         </Card>
 
+        <Card className="border-border">
+          <CardHeader>
+            <CardTitle className="text-sm font-semibold">Password</CardTitle>
+            <CardDescription>Update your account password.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="current-password">Current Password</Label>
+              <Input
+                id="current-password"
+                type="password"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="new-password">New Password</Label>
+              <Input
+                id="new-password"
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
         <div className="flex justify-end">
           <Button
-            onClick={() => toast.success("Profile updated successfully.")}
+            onClick={() => void saveProfile()}
+            disabled={saving}
             className="gap-2"
           >
-            <Save className="h-4 w-4" />
-            Save Changes
+            {saving ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-r-transparent" /> : <Save className="h-4 w-4" />}
+            {saving ? "Saving..." : "Save Changes"}
           </Button>
         </div>
       </div>

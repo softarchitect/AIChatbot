@@ -8,6 +8,8 @@ const schema = z.object({
   adminName: z.string().min(2),
   adminEmail: z.string().email(),
   password: z.string().min(8),
+  phoneCountry: z.string().min(1).optional(),
+  phoneNumber: z.string().min(6).optional(),
   language: z.string().default("en"),
   timezone: z.string().default("UTC"),
 });
@@ -24,6 +26,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const result = await selfRegisterTenant(parsed.data);
+    const origin = new URL(req.url).origin;
     return NextResponse.json(
       {
         data: {
@@ -32,6 +35,8 @@ export async function POST(req: NextRequest) {
           plan: "free",
           trial: result.trial,
           adminEmail: parsed.data.adminEmail.toLowerCase(),
+          emailVerificationRequired: true,
+          verifyUrl: `${origin}/auth/verify-email?token=${result.verificationToken}`,
         },
       },
       { status: 201 }

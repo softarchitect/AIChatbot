@@ -27,9 +27,11 @@ export default function TrialConfigPage() {
   const currentUser = useSessionStore((s) => s.currentUser);
   const platformOwnerEmail = (process.env.NEXT_PUBLIC_PLATFORM_OWNER_EMAIL ?? "owner@saasphere.io").toLowerCase();
   const isPlatformOwner = currentUser?.email?.toLowerCase() === platformOwnerEmail;
+  const isPlatformOperator = isPlatformOwner || Boolean(currentUser?.isPlatformSubAdmin);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [accessDenied, setAccessDenied] = useState(false);
   const [config, setConfig] = useState<TrialConfig>({
     maxAgents: 3,
     enabledFeatureKeys: ["webchat_widget", "email_channel"],
@@ -52,10 +54,15 @@ export default function TrialConfigPage() {
         const response = await fetch("/api/v1/platform/trial-config", {
           headers: { Authorization: `Bearer ${accessToken}` },
         });
+        if (response.status === 403) {
+          setAccessDenied(true);
+          return;
+        }
         const result = await response.json().catch(() => ({}));
         if (!response.ok || !result?.data) {
           throw new Error(result?.error ?? "Failed to load trial configuration.");
         }
+        setAccessDenied(false);
         setConfig(result.data as TrialConfig);
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "Failed to load trial configuration.");
@@ -120,14 +127,27 @@ export default function TrialConfigPage() {
     );
   }
 
-  if (!isPlatformOwner) {
+  if (!isPlatformOperator) {
     return (
       <div className="mx-auto max-w-2xl py-10">
         <Card className="border-border">
           <CardHeader>
             <CardTitle>Access Restricted</CardTitle>
+            <CardDescription>Platform operators only.</CardDescription>
+          </CardHeader>
+        </Card>
+      </div>
+    );
+  }
+
+  if (accessDenied) {
+    return (
+      <div className="mx-auto max-w-2xl py-10">
+        <Card className="border-border">
+          <CardHeader>
+            <CardTitle>Permission Required</CardTitle>
             <CardDescription>
-              Only the Platform Owner can manage default trial configuration.
+              Your sub-admin account is missing the `manage_trial_config` permission.
             </CardDescription>
           </CardHeader>
         </Card>

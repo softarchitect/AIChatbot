@@ -19,6 +19,10 @@ export interface ServerUser {
   name: string;
   email: string;
   role: Role;
+  isPlatformSubAdmin?: boolean;
+  emailVerified?: boolean;
+  phoneCountry?: string | null;
+  phoneNumber?: string | null;
   tenantIds: string[];
   passwordHash: string;
   active: boolean;
@@ -104,6 +108,15 @@ export interface TrialConfig {
   trialDays: number;
 }
 
+export interface SubscriptionPlanConfig {
+  id: string;
+  name: string;
+  trialDays: number;
+  agentLimit: number;
+  enabledFeatureKeys: string[];
+  status: "active" | "inactive";
+}
+
 const defaultPassword = "password123";
 let initialized = false;
 const pool = new Pool({
@@ -169,7 +182,23 @@ async function ensureInitialized() {
       role TEXT NOT NULL,
       tenant_ids TEXT[] NOT NULL DEFAULT '{}',
       password_hash TEXT NOT NULL,
-      active BOOLEAN NOT NULL DEFAULT TRUE
+      active BOOLEAN NOT NULL DEFAULT TRUE,
+      is_platform_sub_admin BOOLEAN NOT NULL DEFAULT FALSE,
+      email_verified BOOLEAN NOT NULL DEFAULT TRUE,
+      phone_country TEXT,
+      phone_number TEXT
+    );
+  `);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_platform_sub_admin BOOLEAN NOT NULL DEFAULT FALSE`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT TRUE`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS phone_country TEXT`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS phone_number TEXT`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS email_verification_tokens (
+      token TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      expires_at TIMESTAMPTZ NOT NULL,
+      consumed_at TIMESTAMPTZ
     );
   `);
   await pool.query(`
@@ -363,6 +392,33 @@ async function ensureInitialized() {
       trial_days INTEGER NOT NULL DEFAULT 14,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS subscription_plans (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      trial_days INTEGER NOT NULL DEFAULT 14,
+      agent_limit INTEGER NOT NULL DEFAULT 3,
+      enabled_feature_keys TEXT[] NOT NULL DEFAULT ARRAY['webchat_widget','email_channel'],
+      status TEXT NOT NULL DEFAULT 'active',
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS platform_sub_admin_permissions (
+      user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      permissions TEXT[] NOT NULL DEFAULT '{}',
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`
+    INSERT INTO subscription_plans (id, name, trial_days, agent_limit, enabled_feature_keys, status, updated_at)
+    VALUES
+      ('free', 'Free', 14, 3, ARRAY['webchat_widget','email_channel'], 'active', NOW()),
+      ('starter', 'Starter', 14, 10, ARRAY['webchat_widget','email_channel','sms_channel'], 'active', NOW()),
+      ('professional', 'Professional', 14, 50, ARRAY['webchat_widget','email_channel','sms_channel','whatsapp_channel','advanced_reports'], 'active', NOW()),
+      ('enterprise', 'Enterprise', 30, 500, ARRAY['webchat_widget','email_channel','sms_channel','whatsapp_channel','voice_channel','advanced_reports','workflow_automation'], 'active', NOW())
+    ON CONFLICT (id) DO NOTHING
   `);
   await pool.query(`
     INSERT INTO platform_trial_config (id, max_agents, enabled_feature_keys, trial_days, updated_at)
@@ -928,6 +984,10 @@ export async function findUserByEmail(email: string) {
        u.name,
        u.email,
        u.role,
+       u.is_platform_sub_admin AS "isPlatformSubAdmin",
+       u.email_verified AS "emailVerified",
+       u.phone_country AS "phoneCountry",
+       u.phone_number AS "phoneNumber",
        COALESCE(array_agg(ut.tenant_id) FILTER (WHERE ut.tenant_id IS NOT NULL), '{}') AS "tenantIds",
        u.password_hash AS "passwordHash",
        u.active
@@ -948,6 +1008,10 @@ export async function findUserById(userId: string) {
        u.name,
        u.email,
        u.role,
+       u.is_platform_sub_admin AS "isPlatformSubAdmin",
+       u.email_verified AS "emailVerified",
+       u.phone_country AS "phoneCountry",
+       u.phone_number AS "phoneNumber",
        COALESCE(array_agg(ut.tenant_id) FILTER (WHERE ut.tenant_id IS NOT NULL), '{}') AS "tenantIds",
        u.password_hash AS "passwordHash",
        u.active
@@ -1454,6 +1518,36 @@ export async function createTenantUser(
   return findUserById(userId);
 }
 
+export async function updateTenantUser(
+  tenantId: string,
+  userId: string,
+  updates: { role?: Role; active?: boolean; password?: string },
+  context: DbContext
+) {
+  await ensureInitialized();
+  const scoped = await withDbContext({ role: context.role, tenantId }, async (client) => {
+    return client.query<{ id: string }>(
+      `SELECT u.id
+       FROM users u
+       INNER JOIN user_tenants ut ON ut.user_id = u.id
+       WHERE ut.tenant_id = $1 AND u.id = $2`,
+      [tenantId, userId]
+    );
+  });
+  if (!scoped.rows[0]) return null;
+  if (updates.role) {
+    await pool.query(`UPDATE users SET role = $2 WHERE id = $1`, [userId, updates.role]);
+  }
+  if (updates.active !== undefined) {
+    await pool.query(`UPDATE users SET active = $2 WHERE id = $1`, [userId, updates.active]);
+  }
+  if (updates.password) {
+    const hash = await bcrypt.hash(updates.password, 10);
+    await pool.query(`UPDATE users SET password_hash = $2 WHERE id = $1`, [userId, hash]);
+  }
+  return findUserById(userId);
+}
+
 export async function countTenantAgents(tenantId: string, context: DbContext): Promise<number> {
   await ensureInitialized();
   return withDbContext({ role: context.role, tenantId }, async (client) => {
@@ -1513,6 +1607,8 @@ export async function selfRegisterTenant(input: {
   adminName: string;
   adminEmail: string;
   password: string;
+  phoneCountry?: string;
+  phoneNumber?: string;
   language?: string;
   timezone?: string;
 }) {
@@ -1532,9 +1628,15 @@ export async function selfRegisterTenant(input: {
   const passwordHash = await bcrypt.hash(input.password, 10);
   await pool.query(
     `UPDATE users
-     SET name = $2, password_hash = $3, active = TRUE
+     SET name = $2, password_hash = $3, active = TRUE, email_verified = FALSE, phone_country = $4, phone_number = $5
      WHERE email = $1`,
-    [input.adminEmail.toLowerCase(), input.adminName, passwordHash]
+    [
+      input.adminEmail.toLowerCase(),
+      input.adminName,
+      passwordHash,
+      input.phoneCountry ?? null,
+      input.phoneNumber ?? null,
+    ]
   );
 
   for (const flag of mockFeatureFlags) {
@@ -1562,7 +1664,40 @@ export async function selfRegisterTenant(input: {
     { role: "admin", tenantId: tenant.id }
   );
 
-  return { tenant, trial };
+  const verificationToken = await createEmailVerificationToken(input.adminEmail.toLowerCase());
+  return { tenant, trial, verificationToken };
+}
+
+export async function createEmailVerificationToken(email: string): Promise<string> {
+  await ensureInitialized();
+  const user = await findUserByEmail(email);
+  if (!user) {
+    throw new Error("User not found.");
+  }
+  const token = `evt-${crypto.randomUUID().replace(/-/g, "")}`;
+  await pool.query(
+    `INSERT INTO email_verification_tokens (token, user_id, expires_at, consumed_at)
+     VALUES ($1, $2, $3, NULL)`,
+    [token, user.id, new Date(Date.now() + 1000 * 60 * 60 * 24)]
+  );
+  return token;
+}
+
+export async function verifyEmailByToken(token: string): Promise<boolean> {
+  await ensureInitialized();
+  const tokenRow = await pool.query<{ user_id: string; expires_at: Date; consumed_at: Date | null }>(
+    `SELECT user_id, expires_at, consumed_at
+     FROM email_verification_tokens
+     WHERE token = $1`,
+    [token]
+  );
+  const row = tokenRow.rows[0];
+  if (!row || row.consumed_at || row.expires_at.getTime() < Date.now()) {
+    return false;
+  }
+  await pool.query(`UPDATE users SET email_verified = TRUE WHERE id = $1`, [row.user_id]);
+  await pool.query(`UPDATE email_verification_tokens SET consumed_at = NOW() WHERE token = $1`, [token]);
+  return true;
 }
 
 export async function listTenantTeams(tenantId: string, context: DbContext): Promise<TeamRecord[]> {
@@ -1738,6 +1873,231 @@ export async function upsertTenantIntegration(
       ]
     );
   });
+}
+
+export async function listPlatformStats() {
+  await ensureInitialized();
+  const [tenantsRes, activeAgentsRes, subsRes, trialRes] = await Promise.all([
+    pool.query<{ count: string }>(`SELECT COUNT(*)::text AS count FROM tenants`),
+    pool.query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count
+       FROM users
+       WHERE role = 'agent' AND active = TRUE`
+    ),
+    pool.query<{ active_count: string; inactive_count: string }>(
+      `SELECT
+         COUNT(*) FILTER (WHERE status = 'active')::text AS active_count,
+         COUNT(*) FILTER (WHERE status <> 'active')::text AS inactive_count
+       FROM tenants
+       WHERE plan IN (SELECT id FROM subscription_plans)`
+    ),
+    pool.query<{ count: string }>(`SELECT COUNT(*)::text AS count FROM tenants WHERE plan = 'free'`),
+  ]);
+  return {
+    totalTenants: Number(tenantsRes.rows[0]?.count ?? "0"),
+    totalActiveAgents: Number(activeAgentsRes.rows[0]?.count ?? "0"),
+    activeSubscriptions: Number(subsRes.rows[0]?.active_count ?? "0"),
+    expiredSubscriptions: Number(subsRes.rows[0]?.inactive_count ?? "0"),
+    trialTenants: Number(trialRes.rows[0]?.count ?? "0"),
+  };
+}
+
+export async function listSubscriptionPlans(): Promise<SubscriptionPlanConfig[]> {
+  await ensureInitialized();
+  const result = await pool.query<{
+    id: string;
+    name: string;
+    trial_days: number;
+    agent_limit: number;
+    enabled_feature_keys: string[];
+    status: "active" | "inactive";
+  }>(
+    `SELECT id, name, trial_days, agent_limit, enabled_feature_keys, status
+     FROM subscription_plans
+     ORDER BY id ASC`
+  );
+  return result.rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    trialDays: r.trial_days,
+    agentLimit: r.agent_limit,
+    enabledFeatureKeys: r.enabled_feature_keys ?? [],
+    status: r.status,
+  }));
+}
+
+export async function updateSubscriptionPlan(
+  planId: string,
+  values: Partial<Omit<SubscriptionPlanConfig, "id">>
+) {
+  await ensureInitialized();
+  const plans = await listSubscriptionPlans();
+  const current = plans.find((p) => p.id === planId);
+  if (!current) return null;
+  const next: SubscriptionPlanConfig = {
+    ...current,
+    ...values,
+  };
+  await pool.query(
+    `UPDATE subscription_plans
+     SET name = $2, trial_days = $3, agent_limit = $4, enabled_feature_keys = $5, status = $6, updated_at = NOW()
+     WHERE id = $1`,
+    [planId, next.name, next.trialDays, next.agentLimit, next.enabledFeatureKeys, next.status]
+  );
+  return next;
+}
+
+export async function applyPlanToTenant(tenantId: string, planId: string, context: DbContext) {
+  await ensureInitialized();
+  const plans = await listSubscriptionPlans();
+  const plan = plans.find((p) => p.id === planId && p.status === "active");
+  if (!plan) {
+    throw new Error("Plan not found or inactive.");
+  }
+  const updated = await updateTenant(tenantId, { plan: planId as Tenant["plan"] }, context);
+  if (!updated) return null;
+  const currentFlags = await listTenantFeatureFlags(tenantId, context);
+  for (const flag of currentFlags) {
+    await updateTenantFeatureFlag(
+      tenantId,
+      flag.key,
+      plan.enabledFeatureKeys.includes(flag.key),
+      context
+    );
+  }
+  return { tenant: updated, plan };
+}
+
+export async function listPlatformSubAdmins() {
+  await ensureInitialized();
+  const result = await pool.query(
+    `SELECT
+       u.id,
+       u.name,
+       u.email,
+       u.active,
+       COALESCE(p.permissions, '{}') AS permissions
+     FROM users u
+     LEFT JOIN platform_sub_admin_permissions p ON p.user_id = u.id
+     WHERE u.is_platform_sub_admin = TRUE
+     ORDER BY u.name ASC`
+  );
+  return result.rows;
+}
+
+export async function createPlatformSubAdmin(input: {
+  name: string;
+  email: string;
+  password: string;
+}) {
+  await ensureInitialized();
+  const existing = await findUserByEmail(input.email);
+  if (existing) {
+    throw new Error("A user with this email already exists.");
+  }
+  const id = `u-${crypto.randomUUID().slice(0, 8)}`;
+  const hash = await bcrypt.hash(input.password, 10);
+  await pool.query(
+    `INSERT INTO users (id, name, email, role, tenant_ids, password_hash, active, is_platform_sub_admin)
+     VALUES ($1, $2, $3, 'supervisor', '{}', $4, TRUE, TRUE)`,
+    [id, input.name, input.email.toLowerCase(), hash]
+  );
+  await pool.query(
+    `INSERT INTO platform_sub_admin_permissions (user_id, permissions, updated_at)
+     VALUES ($1, $2, NOW())
+     ON CONFLICT (user_id) DO NOTHING`,
+    [id, ["view_platform_stats"]]
+  );
+  return findUserById(id);
+}
+
+export async function updatePlatformSubAdmin(
+  userId: string,
+  values: { name?: string; active?: boolean; password?: string }
+) {
+  await ensureInitialized();
+  const existing = await pool.query<{ id: string }>(
+    `SELECT id FROM users WHERE id = $1 AND is_platform_sub_admin = TRUE`,
+    [userId]
+  );
+  if (!existing.rows[0]) return null;
+  if (values.name !== undefined) {
+    await pool.query(`UPDATE users SET name = $2 WHERE id = $1`, [userId, values.name]);
+  }
+  if (values.active !== undefined) {
+    await pool.query(`UPDATE users SET active = $2 WHERE id = $1`, [userId, values.active]);
+  }
+  if (values.password) {
+    const hash = await bcrypt.hash(values.password, 10);
+    await pool.query(`UPDATE users SET password_hash = $2 WHERE id = $1`, [userId, hash]);
+  }
+  return findUserById(userId);
+}
+
+export async function getPlatformSubAdminPermissions(userId: string): Promise<string[]> {
+  await ensureInitialized();
+  const result = await pool.query<{ permissions: string[] }>(
+    `SELECT permissions
+     FROM platform_sub_admin_permissions
+     WHERE user_id = $1`,
+    [userId]
+  );
+  return result.rows[0]?.permissions ?? [];
+}
+
+export async function setPlatformSubAdminPermissions(userId: string, permissions: string[]) {
+  await ensureInitialized();
+  await pool.query(
+    `INSERT INTO platform_sub_admin_permissions (user_id, permissions, updated_at)
+     VALUES ($1, $2, NOW())
+     ON CONFLICT (user_id)
+     DO UPDATE SET permissions = EXCLUDED.permissions, updated_at = NOW()`,
+    [userId, permissions]
+  );
+  return getPlatformSubAdminPermissions(userId);
+}
+
+export async function updateOwnProfile(
+  userId: string,
+  values: { name?: string; email?: string }
+) {
+  await ensureInitialized();
+  const existing = await findUserById(userId);
+  if (!existing) return null;
+  const nextName = values.name ?? existing.name;
+  const nextEmail = (values.email ?? existing.email).toLowerCase();
+  await pool.query(`UPDATE users SET name = $2, email = $3 WHERE id = $1`, [userId, nextName, nextEmail]);
+  return findUserById(userId);
+}
+
+export async function changeOwnPassword(userId: string, currentPassword: string, nextPassword: string) {
+  await ensureInitialized();
+  const existing = await findUserById(userId);
+  if (!existing) return false;
+  const valid = await validatePassword(currentPassword, existing.passwordHash);
+  if (!valid) return false;
+  const hash = await bcrypt.hash(nextPassword, 10);
+  await pool.query(`UPDATE users SET password_hash = $2 WHERE id = $1`, [userId, hash]);
+  return true;
+}
+
+export async function getTenantSubscriptionSummary(tenantId: string, context: DbContext) {
+  await ensureInitialized();
+  const tenant = await findTenantById(tenantId, context);
+  if (!tenant) return null;
+  const plans = await listSubscriptionPlans();
+  const plan = plans.find((p) => p.id === tenant.plan);
+  const activeAgents = await countTenantAgents(tenantId, context);
+  return {
+    planId: tenant.plan,
+    planName: plan?.name ?? tenant.plan,
+    status: plan?.status ?? "active",
+    trialDays: plan?.trialDays ?? 0,
+    agentLimit: plan?.agentLimit ?? 0,
+    activeAgents,
+    remainingAgents: Math.max(0, (plan?.agentLimit ?? 0) - activeAgents),
+    enabledFeatureKeys: plan?.enabledFeatureKeys ?? [],
+  };
 }
 
 export async function validatePassword(plain: string, hash: string) {

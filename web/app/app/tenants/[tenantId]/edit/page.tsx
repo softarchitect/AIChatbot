@@ -122,6 +122,17 @@ export default function EditTenantPage() {
       if (!response.ok) {
         throw new Error(result?.error ?? "Failed to update tenant");
       }
+      if (values.plan) {
+        await fetch(`/api/v1/tenants/${tenantId}/apply-plan`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+            "x-tenant-id": tenantId,
+          },
+          body: JSON.stringify({ planId: values.plan }),
+        }).catch(() => null);
+      }
       const updatedTenant = result?.data;
       if (updatedTenant) {
         reset({

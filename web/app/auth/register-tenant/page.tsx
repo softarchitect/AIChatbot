@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 
 const schema = z.object({
@@ -18,6 +19,8 @@ const schema = z.object({
   adminName: z.string().min(2),
   adminEmail: z.string().email(),
   password: z.string().min(8),
+  phoneCountry: z.string().min(1),
+  phoneNumber: z.string().min(6),
 });
 
 type RegisterForm = z.infer<typeof schema>;
@@ -25,12 +28,17 @@ type RegisterForm = z.infer<typeof schema>;
 export default function RegisterTenantPage() {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
+  const [verifyUrl, setVerifyUrl] = useState<string | null>(null);
   const {
     register,
     handleSubmit,
+    setValue,
     formState: { errors },
   } = useForm<RegisterForm>({
     resolver: zodResolver(schema),
+    defaultValues: {
+      phoneCountry: "+966",
+    },
   });
 
   const onSubmit = async (values: RegisterForm) => {
@@ -49,8 +57,8 @@ export default function RegisterTenantPage() {
       if (!response.ok) {
         throw new Error(result?.error ?? "Failed to register tenant.");
       }
-      toast.success("Registration successful. You can now sign in.");
-      router.push("/auth/login");
+      setVerifyUrl(result?.data?.verifyUrl ?? null);
+      toast.success("Registration successful. Please verify your email before login.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Registration failed.");
     } finally {
@@ -98,6 +106,37 @@ export default function RegisterTenantPage() {
               <Input type="password" placeholder="Minimum 8 characters" {...register("password")} />
               {errors.password && <p className="text-xs text-destructive">{errors.password.message}</p>}
             </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Country</Label>
+                <Select defaultValue="+966" onValueChange={(v) => setValue("phoneCountry", v)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="+966">Saudi Arabia (+966)</SelectItem>
+                    <SelectItem value="+971">UAE (+971)</SelectItem>
+                    <SelectItem value="+20">Egypt (+20)</SelectItem>
+                    <SelectItem value="+1">USA (+1)</SelectItem>
+                    <SelectItem value="+44">UK (+44)</SelectItem>
+                  </SelectContent>
+                </Select>
+                {errors.phoneCountry && <p className="text-xs text-destructive">{errors.phoneCountry.message}</p>}
+              </div>
+              <div className="space-y-2">
+                <Label>Phone Number</Label>
+                <Input placeholder="5XXXXXXXX" {...register("phoneNumber")} />
+                {errors.phoneNumber && <p className="text-xs text-destructive">{errors.phoneNumber.message}</p>}
+              </div>
+            </div>
+            {verifyUrl ? (
+              <div className="rounded-md border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+                Email verification link generated:{" "}
+                <a href={verifyUrl} className="text-primary underline" target="_blank" rel="noreferrer">
+                  Open verification link
+                </a>
+              </div>
+            ) : null}
             <div className="flex items-center justify-end gap-3 pt-2">
               <Button variant="outline" type="button" onClick={() => router.push("/auth/login")}>
                 Back to Login

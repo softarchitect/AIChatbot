@@ -9,6 +9,8 @@ import {
   User,
   MessageSquare,
   SlidersHorizontal,
+  UserCog,
+  CreditCard,
   ChevronLeft,
   ChevronRight,
   Lock,
@@ -36,6 +38,8 @@ export function AppSidebar() {
   const { t } = useTranslation();
   const platformOwnerEmail = (process.env.NEXT_PUBLIC_PLATFORM_OWNER_EMAIL ?? "owner@saasphere.io").toLowerCase();
   const isPlatformOwner = currentUser?.email?.toLowerCase() === platformOwnerEmail;
+  const canAccessPlatformArea = isPlatformOwner || Boolean(currentUser?.isPlatformSubAdmin);
+  const isAgent = currentUser?.role === "agent";
 
   const tenantId = currentTenant?.id ?? "t1";
   const channelsEnabled =
@@ -45,15 +49,25 @@ export function AppSidebar() {
     hasFeatureEnabled("email_channel") ||
     hasFeatureEnabled("voice_channel");
 
-  const navItems: NavItem[] = [
-    { label: t("nav.dashboard"), href: "/app/dashboard", icon: LayoutDashboard },
-    { label: t("nav.tenants"), href: "/app/tenants", icon: Building2, permission: "view_tenants" },
-    { label: t("nav.channels"), href: "/app/channels", icon: MessageSquare, locked: !channelsEnabled, badge: channelsEnabled ? undefined : "Locked" },
-    ...(isPlatformOwner
-      ? [{ label: "Trial Config", href: "/app/platform/trial-config", icon: SlidersHorizontal } satisfies NavItem]
-      : []),
-    { label: t("nav.profile"), href: "/app/profile", icon: User },
-  ];
+  const navItems: NavItem[] = isAgent
+    ? [
+        { label: "My Dashboard", href: "/app/agent/dashboard", icon: LayoutDashboard },
+        { label: t("nav.channels"), href: "/app/channels", icon: MessageSquare, locked: !channelsEnabled, badge: channelsEnabled ? undefined : "Locked" },
+        { label: t("nav.profile"), href: "/app/profile", icon: User },
+      ]
+    : [
+        { label: t("nav.dashboard"), href: "/app/dashboard", icon: LayoutDashboard },
+        { label: t("nav.tenants"), href: "/app/tenants", icon: Building2, permission: "view_tenants" },
+        { label: t("nav.channels"), href: "/app/channels", icon: MessageSquare, locked: !channelsEnabled, badge: channelsEnabled ? undefined : "Locked" },
+        ...(canAccessPlatformArea
+          ? [
+              { label: "Subscription Plans", href: "/app/platform/subscription-plans", icon: CreditCard } satisfies NavItem,
+              { label: "Sub-admins", href: "/app/platform/sub-admins", icon: UserCog } satisfies NavItem,
+              { label: "Trial Config", href: "/app/platform/trial-config", icon: SlidersHorizontal } satisfies NavItem,
+            ]
+          : []),
+        { label: t("nav.profile"), href: "/app/profile", icon: User },
+      ];
 
   const tenantNavItems: NavItem[] = [
     { label: t("tenant.overview"), href: `/app/tenants/${tenantId}/overview`, icon: LayoutDashboard },
@@ -94,7 +108,9 @@ export function AppSidebar() {
         <nav className="flex-1 overflow-y-auto px-3 py-3">
           <div className="space-y-1">
             {navItems.map((item) => {
-              const disabled = item.permission && !hasPermission(item.permission);
+              const disabled =
+                (item.permission && !hasPermission(item.permission)) ||
+                (item.href === "/app/tenants" && !canAccessPlatformArea);
               const locked = item.locked;
 
               const content = (
@@ -159,7 +175,7 @@ export function AppSidebar() {
           </div>
 
           {/* Tenant-specific nav when on tenant detail pages */}
-          {pathname.includes(`/app/tenants/${tenantId}/`) && (
+          {!isAgent && pathname.includes(`/app/tenants/${tenantId}/`) && (
             <>
               <div className="my-4 h-px bg-border" />
               {!sidebarCollapsed && (

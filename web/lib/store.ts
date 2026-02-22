@@ -33,6 +33,7 @@ interface SessionState {
     name: string;
     email: string;
     role: Role;
+    isPlatformSubAdmin?: boolean;
     avatar?: string;
   } | null;
   currentTenant: Tenant | null;
@@ -40,6 +41,7 @@ interface SessionState {
   dir: "ltr" | "rtl";
   sidebarCollapsed: boolean;
   isLoading: boolean;
+  authError: string | null;
   rolePermissionsByTenant: Record<string, Record<Role, string[]>>;
   tenantFeatureFlagsByTenant: Record<string, Record<string, boolean>>;
 
@@ -52,6 +54,7 @@ interface SessionState {
   toggleSidebar: () => void;
   setSidebarCollapsed: (collapsed: boolean) => void;
   setLoading: (loading: boolean) => void;
+  clearAuthError: () => void;
   hydrateTenantPermissions: (tenantId: string, accessToken: string) => Promise<void>;
   hydrateTenantFeatureFlags: (tenantId: string, accessToken: string) => Promise<void>;
   setTenantFeatureFlags: (
@@ -113,11 +116,12 @@ export const useSessionStore = create<SessionState>()(
   dir: "ltr",
   sidebarCollapsed: false,
   isLoading: false,
+  authError: null,
   rolePermissionsByTenant: {},
   tenantFeatureFlagsByTenant: {},
 
   login: async (email: string, password: string) => {
-    set({ isLoading: true });
+    set({ isLoading: true, authError: null });
     const useApi = process.env.NEXT_PUBLIC_USE_API_AUTH === "true";
 
     if (useApi) {
@@ -128,7 +132,8 @@ export const useSessionStore = create<SessionState>()(
           body: JSON.stringify({ email, password }),
         });
         if (!response.ok) {
-          set({ isLoading: false });
+          const result = await response.json().catch(() => ({}));
+          set({ isLoading: false, authError: result?.error ?? "Invalid credentials. Please try again." });
           return false;
         }
 
@@ -148,9 +153,11 @@ export const useSessionStore = create<SessionState>()(
             name: result.user.name,
             email: result.user.email,
             role,
+            isPlatformSubAdmin: Boolean(result.user.isPlatformSubAdmin),
           },
           currentTenant: firstTenant ?? null,
           isLoading: false,
+          authError: null,
         });
         if (result.accessToken && firstTenant?.id) {
           void get().hydrateTenantPermissions(firstTenant.id, result.accessToken);
@@ -158,7 +165,7 @@ export const useSessionStore = create<SessionState>()(
         }
         return true;
       } catch {
-        set({ isLoading: false });
+        set({ isLoading: false, authError: "Unable to sign in. Please try again." });
         return false;
       }
     }
@@ -180,12 +187,13 @@ export const useSessionStore = create<SessionState>()(
       },
       currentTenant: tenants[0],
       isLoading: false,
+      authError: null,
     });
     return true;
   },
 
   oauthLogin: async (provider, idToken) => {
-    set({ isLoading: true });
+    set({ isLoading: true, authError: null });
     try {
       const response = await fetch("/api/v1/auth/oauth", {
         method: "POST",
@@ -193,7 +201,8 @@ export const useSessionStore = create<SessionState>()(
         body: JSON.stringify({ provider, idToken }),
       });
       if (!response.ok) {
-        set({ isLoading: false });
+        const result = await response.json().catch(() => ({}));
+        set({ isLoading: false, authError: result?.error ?? "OAuth sign-in failed." });
         return false;
       }
       const result = await response.json();
@@ -212,9 +221,11 @@ export const useSessionStore = create<SessionState>()(
           name: result.user.name,
           email: result.user.email,
           role,
+          isPlatformSubAdmin: Boolean(result.user.isPlatformSubAdmin),
         },
         currentTenant: firstTenant ?? null,
         isLoading: false,
+        authError: null,
       });
       if (result.accessToken && firstTenant?.id) {
         void get().hydrateTenantPermissions(firstTenant.id, result.accessToken);
@@ -222,7 +233,7 @@ export const useSessionStore = create<SessionState>()(
       }
       return true;
     } catch {
-      set({ isLoading: false });
+      set({ isLoading: false, authError: "OAuth sign-in failed. Please try again." });
       return false;
     }
   },
@@ -236,6 +247,7 @@ export const useSessionStore = create<SessionState>()(
       currentTenant: null,
       rolePermissionsByTenant: {},
       tenantFeatureFlagsByTenant: {},
+      authError: null,
     });
   },
 
@@ -269,6 +281,10 @@ export const useSessionStore = create<SessionState>()(
 
   setLoading: (loading) => {
     set({ isLoading: loading });
+  },
+
+  clearAuthError: () => {
+    set({ authError: null });
   },
 
   hydrateTenantPermissions: async (tenantId, accessToken) => {
