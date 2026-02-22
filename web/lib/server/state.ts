@@ -98,6 +98,12 @@ export interface TenantIntegrationConfig {
   updatedAt: string;
 }
 
+export interface TrialConfig {
+  maxAgents: number;
+  enabledFeatureKeys: string[];
+  trialDays: number;
+}
+
 const defaultPassword = "password123";
 let initialized = false;
 const pool = new Pool({
@@ -348,6 +354,20 @@ async function ensureInitialized() {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       PRIMARY KEY (tenant_id, provider)
     );
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS platform_trial_config (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      max_agents INTEGER NOT NULL DEFAULT 3,
+      enabled_feature_keys TEXT[] NOT NULL DEFAULT ARRAY['webchat_widget','email_channel'],
+      trial_days INTEGER NOT NULL DEFAULT 14,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await pool.query(`
+    INSERT INTO platform_trial_config (id, max_agents, enabled_feature_keys, trial_days, updated_at)
+    VALUES (1, 3, ARRAY['webchat_widget','email_channel'], 14, NOW())
+    ON CONFLICT (id) DO NOTHING
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tenants_status_plan ON tenants(status, plan)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)`);
@@ -850,6 +870,12 @@ export async function addTenant(input: {
       [tenant.id, role, rolePermissionsMap[role]]
     );
   }
+  await pool.query(
+    `INSERT INTO teams (id,tenant_id,name,created_at)
+     VALUES ($1,$2,$3,$4)
+     ON CONFLICT (id) DO NOTHING`,
+    [`team-${tenant.id}`, tenant.id, "Support", new Date()]
+  );
 
   return tenant;
 }
@@ -1369,6 +1395,174 @@ export async function listTenantAgents(tenantId: string) {
     [tenantId]
   );
   return result.rows;
+}
+
+export async function listTenantUsers(tenantId: string, context: DbContext) {
+  await ensureInitialized();
+  return withDbContext({ role: context.role, tenantId }, async (client) => {
+    const result = await client.query(
+      `SELECT
+         u.id,
+         u.name,
+         u.email,
+         u.role,
+         u.active
+       FROM users u
+       INNER JOIN user_tenants ut ON ut.user_id = u.id
+       WHERE ut.tenant_id = $1
+       ORDER BY u.name ASC`,
+      [tenantId]
+    );
+    return result.rows.map((row) => ({
+      ...row,
+      status: row.active ? "active" : "inactive",
+    }));
+  });
+}
+
+export async function createTenantUser(
+  tenantId: string,
+  input: { name: string; email: string; role: Role; password?: string },
+  context: DbContext
+) {
+  await ensureInitialized();
+  const existing = await findUserByEmail(input.email);
+  if (existing) {
+    throw new Error("A user with this email already exists.");
+  }
+  const passwordHash = await bcrypt.hash(input.password ?? defaultPassword, 10);
+  const userId = `u-${crypto.randomUUID().slice(0, 8)}`;
+  await withDbContext({ role: context.role, tenantId }, async (client) => {
+    await client.query(
+      `INSERT INTO users (id,name,email,role,tenant_ids,password_hash,active)
+       VALUES ($1,$2,$3,$4,$5,$6,TRUE)`,
+      [userId, input.name, input.email.toLowerCase(), input.role, [tenantId], passwordHash]
+    );
+    await client.query(
+      `INSERT INTO user_tenants (user_id, tenant_id) VALUES ($1, $2)`,
+      [userId, tenantId]
+    );
+    if (input.role === "agent") {
+      await client.query(
+        `INSERT INTO user_teams (user_id, team_id)
+         VALUES ($1, $2)
+         ON CONFLICT (user_id, team_id) DO NOTHING`,
+        [userId, `team-${tenantId}`]
+      );
+    }
+  });
+  return findUserById(userId);
+}
+
+export async function countTenantAgents(tenantId: string, context: DbContext): Promise<number> {
+  await ensureInitialized();
+  return withDbContext({ role: context.role, tenantId }, async (client) => {
+    const result = await client.query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count
+       FROM users u
+       INNER JOIN user_tenants ut ON ut.user_id = u.id
+       WHERE ut.tenant_id = $1 AND u.role = 'agent' AND u.active = TRUE`,
+      [tenantId]
+    );
+    return Number(result.rows[0]?.count ?? "0");
+  });
+}
+
+export async function getPlatformTrialConfig(): Promise<TrialConfig> {
+  await ensureInitialized();
+  const result = await pool.query<{
+    max_agents: number;
+    enabled_feature_keys: string[];
+    trial_days: number;
+  }>(
+    `SELECT max_agents, enabled_feature_keys, trial_days
+     FROM platform_trial_config
+     WHERE id = 1`
+  );
+  const row = result.rows[0];
+  if (!row) {
+    return { maxAgents: 3, enabledFeatureKeys: ["webchat_widget", "email_channel"], trialDays: 14 };
+  }
+  return {
+    maxAgents: row.max_agents,
+    enabledFeatureKeys: row.enabled_feature_keys ?? [],
+    trialDays: row.trial_days,
+  };
+}
+
+export async function updatePlatformTrialConfig(values: Partial<TrialConfig>) {
+  await ensureInitialized();
+  const current = await getPlatformTrialConfig();
+  const next: TrialConfig = {
+    maxAgents: values.maxAgents ?? current.maxAgents,
+    enabledFeatureKeys: values.enabledFeatureKeys ?? current.enabledFeatureKeys,
+    trialDays: values.trialDays ?? current.trialDays,
+  };
+  await pool.query(
+    `UPDATE platform_trial_config
+     SET max_agents = $1, enabled_feature_keys = $2, trial_days = $3, updated_at = NOW()
+     WHERE id = 1`,
+    [next.maxAgents, next.enabledFeatureKeys, next.trialDays]
+  );
+  return next;
+}
+
+export async function selfRegisterTenant(input: {
+  companyName: string;
+  domain: string;
+  adminName: string;
+  adminEmail: string;
+  password: string;
+  language?: string;
+  timezone?: string;
+}) {
+  await ensureInitialized();
+  const trial = await getPlatformTrialConfig();
+  const tenant = await addTenant(
+    {
+      name: input.companyName,
+      domain: input.domain,
+      adminEmail: input.adminEmail,
+      language: input.language ?? "en",
+      timezone: input.timezone ?? "UTC",
+      plan: "free",
+    },
+    { role: "admin" }
+  );
+  const passwordHash = await bcrypt.hash(input.password, 10);
+  await pool.query(
+    `UPDATE users
+     SET name = $2, password_hash = $3, active = TRUE
+     WHERE email = $1`,
+    [input.adminEmail.toLowerCase(), input.adminName, passwordHash]
+  );
+
+  for (const flag of mockFeatureFlags) {
+    await updateTenantFeatureFlag(
+      tenant.id,
+      flag.key,
+      trial.enabledFeatureKeys.includes(flag.key),
+      { role: "admin", tenantId: tenant.id }
+    );
+  }
+
+  await addAuditLog(
+    {
+      tenantId: tenant.id,
+      actor: "Self Registration",
+      actorEmail: input.adminEmail.toLowerCase(),
+      action: "tenant.self_registered",
+      target: tenant.name,
+      details: {
+        plan: "free",
+        trialDays: trial.trialDays,
+        maxAgents: trial.maxAgents,
+      },
+    },
+    { role: "admin", tenantId: tenant.id }
+  );
+
+  return { tenant, trial };
 }
 
 export async function listTenantTeams(tenantId: string, context: DbContext): Promise<TeamRecord[]> {

@@ -61,20 +61,48 @@ type InviteForm = z.infer<typeof inviteSchema>;
 
 export default function TenantUsersPage() {
   const hasPermission = useSessionStore((s) => s.hasPermission);
+  const accessToken = useSessionStore((s) => s.accessToken);
   const params = useParams();
   const tenantId = params.tenantId as string;
   const [loading, setLoading] = useState(true);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [users, setUsers] = useState(tenantUsers.filter((u) => u.tenantId === tenantId));
   const canEditUsers = hasPermission("edit_users");
 
-  const users = tenantUsers.filter((u) => u.tenantId === tenantId);
-
   useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 500);
-    return () => clearTimeout(timer);
-  }, []);
+    const useApi = process.env.NEXT_PUBLIC_USE_API_AUTH === "true";
+    if (!useApi) {
+      const timer = setTimeout(() => setLoading(false), 500);
+      return () => clearTimeout(timer);
+    }
+    if (!accessToken) {
+      setUsers([]);
+      setLoading(false);
+      toast.error("Session expired. Please sign in again.");
+      return;
+    }
+    void (async () => {
+      try {
+        const response = await fetch(`/api/v1/tenants/${tenantId}/users`, {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "x-tenant-id": tenantId,
+          },
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || !Array.isArray(result?.data)) {
+          throw new Error(result?.error ?? "Failed to load users.");
+        }
+        setUsers(result.data);
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Failed to load users.");
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [accessToken, tenantId]);
 
   const {
     register,
@@ -95,11 +123,50 @@ export default function TenantUsersPage() {
 
   const onInvite = async (data: InviteForm) => {
     setSubmitting(true);
-    await new Promise((r) => setTimeout(r, 1000));
-    toast.success(`Invitation sent to ${data.email}`);
-    setSubmitting(false);
-    setInviteOpen(false);
-    reset();
+    const useApi = process.env.NEXT_PUBLIC_USE_API_AUTH === "true";
+    try {
+      if (useApi) {
+        if (!accessToken) {
+          throw new Error("Session expired. Please sign in again.");
+        }
+        const response = await fetch(`/api/v1/tenants/${tenantId}/users`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+            "x-tenant-id": tenantId,
+          },
+          body: JSON.stringify({
+            name: data.email.split("@")[0] ?? "New User",
+            email: data.email,
+            role: data.role,
+          }),
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(result?.error ?? "Failed to invite user.");
+        }
+        const refreshed = await fetch(`/api/v1/tenants/${tenantId}/users`, {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "x-tenant-id": tenantId,
+          },
+        });
+        const refreshedJson = await refreshed.json().catch(() => ({}));
+        if (refreshed.ok && Array.isArray(refreshedJson?.data)) {
+          setUsers(refreshedJson.data);
+        }
+      } else {
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+      toast.success(`Invitation sent to ${data.email}`);
+      setInviteOpen(false);
+      reset();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to invite user.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (

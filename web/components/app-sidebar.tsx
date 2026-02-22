@@ -8,6 +8,7 @@ import {
   Building2,
   User,
   MessageSquare,
+  SlidersHorizontal,
   ChevronLeft,
   ChevronRight,
   Lock,
@@ -30,8 +31,11 @@ interface NavItem {
 
 export function AppSidebar() {
   const pathname = usePathname();
-  const { sidebarCollapsed, toggleSidebar, hasPermission, hasFeatureEnabled, currentTenant } = useSessionStore();
+  const { sidebarCollapsed, toggleSidebar, hasPermission, hasFeatureEnabled, currentTenant, currentUser } =
+    useSessionStore();
   const { t } = useTranslation();
+  const platformOwnerEmail = (process.env.NEXT_PUBLIC_PLATFORM_OWNER_EMAIL ?? "owner@saasphere.io").toLowerCase();
+  const isPlatformOwner = currentUser?.email?.toLowerCase() === platformOwnerEmail;
 
   const tenantId = currentTenant?.id ?? "t1";
   const channelsEnabled =
@@ -45,6 +49,9 @@ export function AppSidebar() {
     { label: t("nav.dashboard"), href: "/app/dashboard", icon: LayoutDashboard },
     { label: t("nav.tenants"), href: "/app/tenants", icon: Building2, permission: "view_tenants" },
     { label: t("nav.channels"), href: "/app/channels", icon: MessageSquare, locked: !channelsEnabled, badge: channelsEnabled ? undefined : "Locked" },
+    ...(isPlatformOwner
+      ? [{ label: "Trial Config", href: "/app/platform/trial-config", icon: SlidersHorizontal } satisfies NavItem]
+      : []),
     { label: t("nav.profile"), href: "/app/profile", icon: User },
   ];
 

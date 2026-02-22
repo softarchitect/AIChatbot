@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { motion } from "framer-motion";
 import {
   Users,
@@ -43,14 +44,41 @@ const stagger = {
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { currentUser } = useSessionStore();
+  const { currentUser, currentTenant, accessToken } = useSessionStore();
   const { t } = useTranslation();
   const [loading, setLoading] = useState(true);
+  const [trialConfig, setTrialConfig] = useState<{
+    maxAgents: number;
+    trialDays: number;
+    enabledFeatureKeys: string[];
+  } | null>(null);
+  const platformOwnerEmail = (process.env.NEXT_PUBLIC_PLATFORM_OWNER_EMAIL ?? "owner@saasphere.io").toLowerCase();
+  const isPlatformOwner = currentUser?.email?.toLowerCase() === platformOwnerEmail;
 
   useEffect(() => {
+    if (currentUser && !isPlatformOwner && currentTenant?.id) {
+      router.replace(`/app/tenants/${currentTenant.id}/overview`);
+      return;
+    }
     const timer = setTimeout(() => setLoading(false), 800);
     return () => clearTimeout(timer);
-  }, []);
+  }, [currentTenant?.id, currentUser, isPlatformOwner, router]);
+
+  useEffect(() => {
+    if (!isPlatformOwner || !accessToken) return;
+    void (async () => {
+      try {
+        const response = await fetch("/api/v1/platform/trial-config", {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || !result?.data) return;
+        setTrialConfig(result.data);
+      } catch {
+        // keep card fallback values
+      }
+    })();
+  }, [accessToken, isPlatformOwner]);
 
   const activeTenants = tenants.filter((t) => t.status === "active").length;
   const totalUsers = tenants.reduce((sum, t) => sum + t.activeUsers, 0);
@@ -221,12 +249,12 @@ export default function DashboardPage() {
                 {
                   label: t("dashboard.invite_user"),
                   icon: UserPlus,
-                  href: "/app/tenants/t1/users",
+                  href: `/app/tenants/${currentTenant?.id ?? "t1"}/users`,
                 },
                 {
                   label: t("dashboard.generate_key"),
                   icon: Key,
-                  href: "/app/tenants/t1/api-keys",
+                  href: `/app/tenants/${currentTenant?.id ?? "t1"}/api-keys`,
                 },
               ].map((action) => (
                 <motion.div key={action.label} whileHover={{ x: 4 }} transition={{ duration: 0.15 }}>
@@ -279,6 +307,28 @@ export default function DashboardPage() {
                   </motion.div>
                 ))}
               </div>
+              {isPlatformOwner && (
+                <div className="mt-4 rounded-lg border border-border bg-muted/30 p-3">
+                  <Link
+                    href="/app/platform/trial-config"
+                    className="text-xs font-semibold uppercase tracking-wide text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+                  >
+                    Trial Config Summary
+                  </Link>
+                  <p className="mt-2 text-sm text-foreground">
+                    Max agents: <span className="font-medium">{trialConfig?.maxAgents ?? 3}</span>
+                  </p>
+                  <p className="text-sm text-foreground">
+                    Trial days: <span className="font-medium">{trialConfig?.trialDays ?? 14}</span>
+                  </p>
+                  <p className="text-sm text-foreground">
+                    Enabled features:{" "}
+                    <span className="font-medium">
+                      {trialConfig?.enabledFeatureKeys?.length ?? 2}
+                    </span>
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>

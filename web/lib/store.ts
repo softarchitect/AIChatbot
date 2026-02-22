@@ -3,6 +3,27 @@ import { persist } from "zustand/middleware";
 import type { Role, Tenant } from "./mock/data";
 import { tenants } from "./mock/data";
 
+function createFallbackTenant(tenantId: string, tenantName?: string): Tenant {
+  return {
+    id: tenantId,
+    name: tenantName ?? "Tenant",
+    domain: "",
+    status: "active",
+    plan: "free",
+    language: "en",
+    timezone: "UTC",
+    primaryColor: "#2563eb",
+    accentColor: "#06b6d4",
+    headerText: "Tenant Portal",
+    welcomeMessage: "Welcome.",
+    createdAt: new Date().toISOString(),
+    activeUsers: 0,
+    totalUsers: 0,
+    storageUsedMb: 0,
+    apiCallsThisMonth: 0,
+  };
+}
+
 interface SessionState {
   isAuthenticated: boolean;
   accessToken: string | null;
@@ -114,7 +135,9 @@ export const useSessionStore = create<SessionState>()(
         const result = await response.json();
         const role = result.user.role as Role;
         const firstTenantId = result.user.tenantIds?.[0];
-        const firstTenant = tenants.find((t) => t.id === firstTenantId) ?? tenants[0];
+        const firstTenant = firstTenantId
+          ? (tenants.find((t) => t.id === firstTenantId) ?? createFallbackTenant(firstTenantId))
+          : null;
 
         set({
           isAuthenticated: true,
@@ -126,7 +149,7 @@ export const useSessionStore = create<SessionState>()(
             email: result.user.email,
             role,
           },
-          currentTenant: firstTenant,
+          currentTenant: firstTenant ?? null,
           isLoading: false,
         });
         if (result.accessToken && firstTenant?.id) {
@@ -176,7 +199,9 @@ export const useSessionStore = create<SessionState>()(
       const result = await response.json();
       const role = result.user.role as Role;
       const firstTenantId = result.user.tenantIds?.[0];
-      const firstTenant = tenants.find((t) => t.id === firstTenantId) ?? tenants[0];
+      const firstTenant = firstTenantId
+        ? (tenants.find((t) => t.id === firstTenantId) ?? createFallbackTenant(firstTenantId))
+        : null;
 
       set({
         isAuthenticated: true,
@@ -188,7 +213,7 @@ export const useSessionStore = create<SessionState>()(
           email: result.user.email,
           role,
         },
-        currentTenant: firstTenant,
+        currentTenant: firstTenant ?? null,
         isLoading: false,
       });
       if (result.accessToken && firstTenant?.id) {
@@ -216,13 +241,12 @@ export const useSessionStore = create<SessionState>()(
 
   switchTenant: (tenantId: string) => {
     const tenant = tenants.find((t) => t.id === tenantId);
-    if (tenant) {
-      set({ currentTenant: tenant });
-      const token = get().accessToken;
-      if (token) {
-        void get().hydrateTenantPermissions(tenant.id, token);
-        void get().hydrateTenantFeatureFlags(tenant.id, token);
-      }
+    const resolvedTenant = tenant ?? createFallbackTenant(tenantId);
+    set({ currentTenant: resolvedTenant });
+    const token = get().accessToken;
+    if (token) {
+      void get().hydrateTenantPermissions(resolvedTenant.id, token);
+      void get().hydrateTenantFeatureFlags(resolvedTenant.id, token);
     }
   },
 

@@ -55,7 +55,7 @@ export default function TenantsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const updated = searchParams.get("updated");
-  const { hasPermission, accessToken } = useSessionStore();
+  const { hasPermission, accessToken, currentUser, currentTenant } = useSessionStore();
   const { t } = useTranslation();
   const [loading, setLoading] = useState(true);
   const [tenantRows, setTenantRows] = useState<Tenant[]>([]);
@@ -67,6 +67,12 @@ export default function TenantsPage() {
   const perPage = 5;
 
   useEffect(() => {
+    const platformOwnerEmail = (process.env.NEXT_PUBLIC_PLATFORM_OWNER_EMAIL ?? "owner@saasphere.io").toLowerCase();
+    const isPlatformOwner = currentUser?.email?.toLowerCase() === platformOwnerEmail;
+    if (currentUser && !isPlatformOwner && currentTenant?.id) {
+      router.replace(`/app/tenants/${currentTenant.id}/overview`);
+      return;
+    }
     const useApi = process.env.NEXT_PUBLIC_USE_API_AUTH === "true";
 
     async function loadTenants() {
@@ -102,7 +108,7 @@ export default function TenantsPage() {
     }
 
     void loadTenants();
-  }, [accessToken, updated]);
+  }, [accessToken, currentTenant?.id, currentUser, router, updated]);
 
   useEffect(() => {
     if (updated === "1") {

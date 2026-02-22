@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronsUpDown, Check, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,11 +14,34 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { useSessionStore } from "@/lib/store";
-import { tenants } from "@/lib/mock/data";
+import { tenants as mockTenants, type Tenant } from "@/lib/mock/data";
 
 export function TenantSwitcher({ collapsed, inTopbar = false }: { collapsed?: boolean; inTopbar?: boolean }) {
   const [open, setOpen] = useState(false);
-  const { currentTenant, switchTenant } = useSessionStore();
+  const [tenantOptions, setTenantOptions] = useState<Tenant[]>(mockTenants);
+  const { currentTenant, switchTenant, accessToken } = useSessionStore();
+
+  useEffect(() => {
+    const useApi = process.env.NEXT_PUBLIC_USE_API_AUTH === "true";
+    if (!useApi || !accessToken) {
+      setTenantOptions(mockTenants);
+      return;
+    }
+    void (async () => {
+      try {
+        const response = await fetch("/api/v1/tenants", {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || !Array.isArray(result?.data)) return;
+        setTenantOptions(result.data as Tenant[]);
+      } catch {
+        // keep current options
+      }
+    })();
+  }, [accessToken]);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -47,7 +70,7 @@ export function TenantSwitcher({ collapsed, inTopbar = false }: { collapsed?: bo
           <CommandList>
             <CommandEmpty>No tenant found.</CommandEmpty>
             <CommandGroup>
-              {tenants.map((tenant) => (
+              {tenantOptions.map((tenant) => (
                 <CommandItem
                   key={tenant.id}
                   value={tenant.name}

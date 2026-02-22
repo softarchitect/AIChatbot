@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { motion } from "framer-motion";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -383,6 +384,13 @@ export default function LoginPage() {
             <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">agent@acme.com</code>{" "}
             (agent). Password:{" "}
             <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">password123</code>.
+          </p>
+          <p className="mt-3 text-center text-xs text-muted-foreground">
+            New company?{" "}
+            <Link href="/auth/register-tenant" className="text-primary hover:underline">
+              Register a trial tenant
+            </Link>
+            .
           </p>
         </motion.div>
       </div>
